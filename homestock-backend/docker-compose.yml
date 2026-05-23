@@ -1,0 +1,70 @@
+services:
+  homestock-db:
+    image: pgvector/pgvector:pg15
+    container_name: homestock-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-homestock}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-homestock}
+      POSTGRES_DB: ${POSTGRES_DB:-homestock}
+    volumes:
+      - homestock-db-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-homestock} -d ${POSTGRES_DB:-homestock}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - homestock-net
+
+  homestock-embeddings:
+    build:
+      context: ./embeddings
+      dockerfile: Dockerfile
+    container_name: homestock-embeddings
+    restart: unless-stopped
+    environment:
+      MODEL_NAME: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+    volumes:
+      - homestock-model-cache:/root/.cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - homestock-net
+
+  homestock-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: homestock-api
+    restart: unless-stopped
+    depends_on:
+      homestock-db:
+        condition: service_healthy
+      homestock-embeddings:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-homestock}:${POSTGRES_PASSWORD:-homestock}@homestock-db:5432/${POSTGRES_DB:-homestock}
+      EMBEDDING_SERVICE_URL: http://homestock-embeddings:9000
+      PHOTOS_DIR: /data/photos
+      EMBEDDING_DIM: "384"
+    ports:
+      - "${API_PORT:-8080}:8000"
+    volumes:
+      - homestock-photos:/data/photos
+    networks:
+      - homestock-net
+
+networks:
+  homestock-net:
+    driver: bridge
+
+volumes:
+  homestock-db-data:
+  homestock-photos:
+  homestock-model-cache:
