@@ -15,6 +15,7 @@ import com.homestock.data.remote.dto.WineStats
 import com.homestock.data.remote.dto.ZoneRequest
 import com.homestock.domain.model.Categories
 import com.homestock.domain.model.SearchResult
+import com.homestock.util.normalizeForSearch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -195,24 +196,30 @@ class HomeStockRepository @Inject constructor(
                     zoneNom = dto.zoneNom,
                     emplacementNom = dto.emplacement?.nomEmplacement,
                     score = dto.score,
+                    emplacementPhotoUrl = dto.emplacement?.photoUrl
+                        ?: emplacementDao.getById(dto.emplacementId)?.photoUrl,
                 )
             }
         }.getOrElse { localSearch(clean) }
     }
 
-    /** Offline fallback: simple substring match against the local cache. */
+    /** Offline fallback: accent-insensitive substring match against the local cache. */
     private suspend fun localSearch(query: String): List<SearchResult> {
-        val terms = query.lowercase().split(" ").filter { it.isNotBlank() }
+        val terms = normalizeForSearch(query).split(" ").filter { it.isNotBlank() }
         val results = mutableListOf<SearchResult>()
         val objets = objetDao.getAllOnce()
         for (o in objets) {
-            val hay = listOfNotNull(o.nom, o.sousCategorie, o.notes, o.categorie)
-                .joinToString(" ").lowercase()
+            val hay = normalizeForSearch(
+                listOfNotNull(o.nom, o.sousCategorie, o.notes, o.categorie).joinToString(" "),
+            )
             val matches = terms.count { hay.contains(it) }
             if (matches > 0) {
                 val emp = emplacementDao.getById(o.emplacementId)
                 val zone = emp?.let { zoneDao.getById(it.zoneId) }
-                results += SearchResult(o, zone?.nom, emp?.nomEmplacement, matches.toDouble())
+                results += SearchResult(
+                    o, zone?.nom, emp?.nomEmplacement, matches.toDouble(),
+                    emplacementPhotoUrl = emp?.photoUrl,
+                )
             }
         }
         return results.sortedByDescending { it.score }

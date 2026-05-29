@@ -18,6 +18,7 @@ object Routes {
     const val ZONE_DETAIL = "zone/{zoneId}"
     const val CATEGORY_DETAIL = "category/{categorie}"
     const val OBJET_DETAIL = "objet/{localId}"
+    const val OBJET_EDIT = "objet/{localId}/edit"
 
     fun addPrefill(
         nom: String? = null,
@@ -38,6 +39,7 @@ object Routes {
     fun zoneDetail(zoneId: Long) = "zone/$zoneId"
     fun categoryDetail(cat: String) = "category/${java.net.URLEncoder.encode(cat, "UTF-8")}"
     fun objetDetail(localId: Long) = "objet/$localId"
+    fun editObjet(localId: Long) = "objet/$localId/edit"
 }
 
 enum class BottomTab(val route: String, val label: String, val icon: ImageVector) {

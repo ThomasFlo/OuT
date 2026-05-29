@@ -10,10 +10,13 @@ import com.homestock.domain.model.SearchResult
 import com.homestock.voice.ParsedCommand
 import com.homestock.voice.VoiceParser
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -45,6 +48,10 @@ class SearchViewModel @Inject constructor(
         .map { it.voiceLanguage }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "fr-FR")
 
+    val debugMode: StateFlow<Boolean> = settingsRepository.settings
+        .map { it.debugMode }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val zones: StateFlow<List<ZoneEntity>> = repository.observeZones()
         .map { it.filter(ZoneEntity::actif) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -54,6 +61,29 @@ class SearchViewModel @Inject constructor(
 
     val expiringSoon: StateFlow<List<ObjetEntity>> = repository.observeExpiringSoon(7)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        // Live search-as-you-type, debounced so a keystroke isn't an API call.
+        observeLiveSearch()
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun observeLiveSearch() {
+        viewModelScope.launch {
+            _query
+                .debounce(300)
+                .distinctUntilChanged()
+                .collect { value ->
+                    if (value.isBlank()) {
+                        _results.value = emptyList()
+                    } else {
+                        _searching.value = true
+                        _results.value = repository.search(value)
+                        _searching.value = false
+                    }
+                }
+        }
+    }
 
     fun onQueryChange(value: String) {
         _query.value = value

@@ -8,6 +8,7 @@ data class SearchResult(
     val zoneNom: String?,
     val emplacementNom: String?,
     val score: Double,
+    val emplacementPhotoUrl: String? = null,
 )
 
 object Categories {

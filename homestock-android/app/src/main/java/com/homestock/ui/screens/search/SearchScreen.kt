@@ -35,6 +35,7 @@ import com.homestock.ui.components.MicButton
 import com.homestock.ui.components.ObjetResultCard
 import com.homestock.ui.components.SectionHeader
 import com.homestock.ui.components.ZoneCard
+import com.homestock.ui.components.rememberConfirmHaptic
 
 @Composable
 fun SearchScreen(
@@ -53,6 +54,8 @@ fun SearchScreen(
     val recent by viewModel.recent.collectAsStateWithLifecycle()
     val expiring by viewModel.expiringSoon.collectAsStateWithLifecycle()
     val voiceLang by viewModel.voiceLanguage.collectAsStateWithLifecycle()
+    val debugMode by viewModel.debugMode.collectAsStateWithLifecycle()
+    val confirmHaptic = rememberConfirmHaptic()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -81,6 +84,7 @@ fun SearchScreen(
                     MicButton(
                         language = voiceLang,
                         onResult = { text ->
+                            confirmHaptic()
                             when (val intent = viewModel.classifyVoice(text)) {
                                 is VoiceIntent.Search -> viewModel.search(intent.query)
                                 is VoiceIntent.Add -> onAddVoice(
@@ -101,7 +105,7 @@ fun SearchScreen(
             Spacer(Modifier.height(8.dp))
 
             if (query.isNotBlank()) {
-                SearchResults(searching, results, viewModel, onObjet)
+                SearchResults(searching, results, viewModel, onObjet, debugMode)
             } else {
                 Dashboard(zones, recent, expiring, viewModel, onObjet, onZone)
             }
@@ -124,6 +128,7 @@ private fun SearchResults(
     results: List<com.homestock.domain.model.SearchResult>,
     viewModel: SearchViewModel,
     onObjet: (Long) -> Unit,
+    debugMode: Boolean,
 ) {
     if (searching) {
         Box(Modifier.fillMaxWidth().padding(32.dp), Alignment.Center) {
@@ -148,6 +153,10 @@ private fun SearchResults(
                 quantite = r.objet.quantite,
                 unite = r.objet.unite,
                 etat = r.objet.etat,
+                dateExpiration = r.objet.dateExpiration,
+                emplacementPhotoUrl = viewModel.photoUrl(r.emplacementPhotoUrl),
+                score = r.score,
+                showScore = debugMode,
                 onClick = {
                     val id = r.objet.localId.takeIf { it != 0L }
                     if (id != null) onObjet(id)
@@ -173,7 +182,8 @@ private fun Dashboard(
                 ObjetResultCard(
                     nom = o.nom, categorie = o.categorie, zoneNom = null,
                     emplacementNom = null, photoUrl = viewModel.photoUrl(o.photoUrl),
-                    quantite = o.quantite, unite = o.unite, etat = "⚠ Expiration proche",
+                    quantite = o.quantite, unite = o.unite, etat = o.etat,
+                    dateExpiration = o.dateExpiration,
                     onClick = { onObjet(o.localId) },
                 )
             }
@@ -185,6 +195,7 @@ private fun Dashboard(
                     nom = o.nom, categorie = o.categorie, zoneNom = null,
                     emplacementNom = null, photoUrl = viewModel.photoUrl(o.photoUrl),
                     quantite = o.quantite, unite = o.unite, etat = o.etat,
+                    dateExpiration = o.dateExpiration,
                     onClick = { onObjet(o.localId) },
                 )
             }

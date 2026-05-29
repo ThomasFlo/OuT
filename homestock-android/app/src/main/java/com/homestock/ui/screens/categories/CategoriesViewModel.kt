@@ -17,6 +17,7 @@ data class CategoryObjet(
     val objet: ObjetEntity,
     val zoneNom: String?,
     val emplacementNom: String?,
+    val emplacementPhotoUrl: String? = null,
 )
 
 @HiltViewModel
@@ -45,7 +46,12 @@ class CategoryDetailViewModel @Inject constructor(
         val zoneById = zones.associateBy { it.id }
         objets.map { o ->
             val emp = empById[o.emplacementId]
-            CategoryObjet(o, emp?.let { zoneById[it.zoneId]?.nom }, emp?.nomEmplacement)
+            CategoryObjet(
+                o,
+                emp?.let { zoneById[it.zoneId]?.nom },
+                emp?.nomEmplacement,
+                emp?.photoUrl,
+            )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

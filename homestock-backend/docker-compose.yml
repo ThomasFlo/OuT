@@ -53,6 +53,7 @@ services:
       EMBEDDING_SERVICE_URL: http://homestock-embeddings:9000
       PHOTOS_DIR: /data/photos
       EMBEDDING_DIM: "384"
+      SEMANTIC_THRESHOLD: ${SEMANTIC_THRESHOLD:-0.4}
     ports:
       - "${API_PORT:-8080}:8000"
     volumes:

@@ -20,6 +20,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -77,6 +78,7 @@ private fun Dropdown(
 @Composable
 fun StepObjet(viewModel: AddObjetViewModel, state: AddFormState, onCamera: () -> Unit) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("L'objet", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(
@@ -85,6 +87,26 @@ fun StepObjet(viewModel: AddObjetViewModel, state: AddFormState, onCamera: () ->
             label = { Text("Nom de l'objet") },
             modifier = Modifier.fillMaxWidth(),
         )
+        if (suggestions.isNotEmpty()) {
+            Text(
+                "Objets similaires existants",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            suggestions.forEach { s ->
+                SuggestionChip(
+                    onClick = { viewModel.applySuggestion(s) },
+                    label = {
+                        Text(
+                            buildString {
+                                append(s.objet.nom)
+                                s.zoneNom?.let { append("  •  $it") }
+                            },
+                        )
+                    },
+                )
+            }
+        }
         Dropdown("Catégorie", state.categorie, categories.ifEmpty { Categories.ALL }) { v ->
             viewModel.update { it.copy(categorie = v) }
         }

@@ -58,9 +58,9 @@ def open_bottle(objet_id: int, db: Session = Depends(get_db)):
     current = obj.vin.nombre_bouteilles or 0
     if current <= 0:
         raise HTTPException(400, "Plus aucune bouteille")
+    # The wine bottle count is the single source of truth; the generic
+    # objet.quantite is intentionally left untouched to avoid double-counting.
     obj.vin.nombre_bouteilles = current - 1
-    if obj.quantite is not None:
-        obj.quantite = max(0, obj.quantite - 1)
     db.commit()
     db.refresh(obj)
     broadcast_sync("objet", "updated", obj.id)

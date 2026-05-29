@@ -21,10 +21,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +35,14 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.homestock.ui.theme.ErrorRed
 import com.homestock.ui.theme.SuccessGreen
+import com.homestock.ui.theme.WarningOrange
+
+/** Returns a callback that fires a confirmation haptic, for important actions. */
+@Composable
+fun rememberConfirmHaptic(): () -> Unit {
+    val haptic = LocalHapticFeedback.current
+    return remember(haptic) { { haptic.performHapticFeedback(HapticFeedbackType.LongPress) } }
+}
 
 @Composable
 fun ConnectionDot(connected: Boolean, modifier: Modifier = Modifier) {
@@ -56,9 +67,46 @@ fun PhotoThumbnail(url: String?, modifier: Modifier = Modifier, size: Int = 56) 
     )
 }
 
+/** Classifies how close an object is to its expiration date. */
+enum class ExpirationStatus { NONE, SOON, EXPIRED }
+
+fun expirationStatus(dateExpiration: Long?, withinDays: Int = 7): ExpirationStatus {
+    if (dateExpiration == null) return ExpirationStatus.NONE
+    val now = System.currentTimeMillis()
+    return when {
+        dateExpiration < now -> ExpirationStatus.EXPIRED
+        dateExpiration - now <= withinDays * 86_400_000L -> ExpirationStatus.SOON
+        else -> ExpirationStatus.NONE
+    }
+}
+
+@Composable
+fun ExpirationBadge(status: ExpirationStatus) {
+    if (status == ExpirationStatus.NONE) return
+    val (label, color) = when (status) {
+        ExpirationStatus.EXPIRED -> "Périmé" to ErrorRed
+        ExpirationStatus.SOON -> "Bientôt périmé" to WarningOrange
+        ExpirationStatus.NONE -> return
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        Text(
+            label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White,
+        )
+    }
+}
+
 /**
  * Search result / object list row. The full location is shown FIRST and LARGE,
- * because finding "where is X" is the primary use case.
+ * because finding "where is X" is the primary use case. The thumbnail prefers
+ * the emplacement photo (where the object lives) over the object's own photo.
  */
 @Composable
 fun ObjetResultCard(
@@ -70,9 +118,14 @@ fun ObjetResultCard(
     quantite: Int?,
     unite: String?,
     etat: String?,
+    dateExpiration: Long? = null,
+    emplacementPhotoUrl: String? = null,
     score: Double? = null,
+    showScore: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val thumbnail = emplacementPhotoUrl?.takeIf { it.isNotBlank() } ?: photoUrl
+    val expStatus = expirationStatus(dateExpiration)
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -86,8 +139,8 @@ fun ObjetResultCard(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PhotoThumbnail(photoUrl, size = 64)
-            if (!photoUrl.isNullOrBlank()) Spacer(Modifier.width(12.dp))
+            PhotoThumbnail(thumbnail, size = 64)
+            if (!thumbnail.isNullOrBlank()) Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 // Location, prominent.
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -109,10 +162,16 @@ fun ObjetResultCard(
                     )
                 }
                 Spacer(Modifier.padding(top = 4.dp))
-                Text(
-                    text = nom,
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = nom,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (expStatus != ExpirationStatus.NONE) {
+                        Spacer(Modifier.width(8.dp))
+                        ExpirationBadge(expStatus)
+                    }
+                }
                 Text(
                     text = buildString {
                         append(categorie)
@@ -122,7 +181,7 @@ fun ObjetResultCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (score != null) {
+                if (showScore && score != null) {
                     Text(
                         text = "score ${"%.2f".format(score)}",
                         fontSize = 11.sp,

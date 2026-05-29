@@ -55,15 +55,19 @@ Documentation interactive : `http://<IP_DU_NAS>:8080/docs`
 Au démarrage, l'API crée les tables, les index (IVFFlat cosinus + GIN trigram) et
 insère les **21 zones** et les **18 catégories** par défaut.
 
-### Réseau
+### Réseau & sécurité
 - Seul `homestock-api` est exposé sur le LAN (port `API_PORT`).
 - Les téléphones se connectent en HTTP/WS clair sur le LAN privé (pas de TLS requis).
-- Pour un accès distant, placez un reverse-proxy TLS (Synology, Traefik…) devant l'API.
+- **L'API n'a pas d'authentification et autorise toutes les origines (CORS `*`)** :
+  c'est volontaire pour un usage privé à deux sur réseau local. **Ne l'exposez pas
+  directement sur Internet.** Pour un accès distant, placez un reverse-proxy TLS
+  avec authentification (Synology, Traefik…) devant l'API.
 
 ### Sauvegarde
 - Les données vivent dans les volumes Docker `homestock-db-data` et `homestock-photos`.
 - Export/Import JSON également disponibles via l'app (Paramètres) ou les endpoints
-  `GET /export` et `POST /import`.
+  `GET /export` et `POST /import`. L'import refuse une base déjà peuplée ; utilisez
+  `POST /import?replace=true` pour écraser les données existantes.
 
 ---
 
@@ -104,18 +108,24 @@ Installez l'APK sur chaque Pixel (`adb install` ou copie directe).
 
 - **Rechercher** (onglet 🔍) : tape ou dicte. La recherche est sémantique
   (« outil pour visser » trouve « tournevis ») via pgvector, fusionnée avec la
-  recherche plein-texte française (Reciprocal Rank Fusion). La **localisation
-  complète** est affichée en grand, en premier.
+  recherche plein-texte française (Reciprocal Rank Fusion), déclenchée au fil de
+  la frappe (debounce). La **localisation complète** est affichée en grand, en
+  premier ; un badge rouge/orange signale les objets périmés / bientôt périmés.
 - **Voix** : le micro dans la barre de recherche.
   - Question (« où sont mes chaussures d'hiver ? ») → recherche.
   - Commande (« range les chaussures dans le meuble sous l'escalier ») → pré-remplit
     le formulaire d'ajout (objet, zone par matching flou, emplacement, quantité).
 - **Ajouter** (FAB +) : formulaire en 4 étapes (objet → localisation → détails → confirmation),
   photos via CameraX (compressées à 800 px avant upload), sous-formulaire vin si catégorie « cave à vins ».
-- **Zones** (🏠) / **Catégories** (📂) : navigation et filtres.
+  La saisie du nom **suggère les objets similaires existants** (réutilise leur catégorie/emplacement).
+- **Modifier / supprimer** : depuis l'écran de détail d'un objet (le même stepper sert à l'édition).
+- **Zones** (🏠) / **Catégories** (📂) : navigation, filtres et recherche texte dans une zone.
 - **Cave à vins** : statistiques, filtres par type, bouton « Je débouche une bouteille ».
 - **Paramètres** (⚙️) : NAS, profils, zones (ajout/renommage/activation), langue vocale,
-  notifications d'expiration, export/import JSON.
+  notifications d'expiration, mode debug (affiche les scores), export/import JSON.
+- **Notifications** : un job WorkManager quotidien alerte des produits expirant sous 3 jours,
+  même app fermée.
+- **Retour haptique** sur les actions importantes (enregistrement, suppression, débouchage, voix).
 
 ### Synchronisation & offline
 - Room est la **source de vérité locale** : l'app fonctionne hors-ligne.

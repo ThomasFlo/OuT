@@ -15,8 +15,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.homestock.ui.components.ConnectionDot
 import com.homestock.ui.components.ObjetResultCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,6 +26,7 @@ import com.homestock.ui.components.ObjetResultCard
 fun CategoryDetailScreen(
     onBack: () -> Unit,
     onObjet: (Long) -> Unit,
+    connected: Boolean = true,
     viewModel: CategoryDetailViewModel = hiltViewModel(),
 ) {
     val objets by viewModel.objets.collectAsStateWithLifecycle()
@@ -37,6 +40,7 @@ fun CategoryDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
                 },
+                actions = { ConnectionDot(connected, Modifier.padding(end = 12.dp)) },
             )
         },
     ) { padding ->
@@ -51,6 +55,8 @@ fun CategoryDetailScreen(
                     quantite = item.objet.quantite,
                     unite = item.objet.unite,
                     etat = item.objet.etat,
+                    dateExpiration = item.objet.dateExpiration,
+                    emplacementPhotoUrl = viewModel.photoUrl(item.emplacementPhotoUrl),
                     onClick = { onObjet(item.objet.localId) },
                 )
             }

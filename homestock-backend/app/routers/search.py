@@ -8,7 +8,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
-from ..database import get_db
+from ..database import SEMANTIC_THRESHOLD, get_db
 from ..services.embedding import embed_one
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -71,7 +71,8 @@ def search(req: schemas.SearchRequest, db: Session = Depends(get_db)):
     if not query:
         return []
 
-    semantic = _semantic_ranking(db, query, req.limit, req.threshold)
+    threshold = req.threshold if req.threshold is not None else SEMANTIC_THRESHOLD
+    semantic = _semantic_ranking(db, query, req.limit, threshold)
     fulltext = _fulltext_ranking(db, query, req.limit)
     fused = _reciprocal_rank_fusion(semantic, fulltext)[: req.limit]
 

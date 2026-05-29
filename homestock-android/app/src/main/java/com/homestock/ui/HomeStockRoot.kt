@@ -126,19 +126,29 @@ private fun MainScaffold(viewModel: MainViewModel) {
                 ZoneDetailScreen(
                     onBack = { navController.popBackStack() },
                     onObjet = { navController.navigate(Routes.objetDetail(it)) },
+                    connected = connected,
                 )
             }
             composable(Routes.CATEGORY_DETAIL) {
                 CategoryDetailScreen(
                     onBack = { navController.popBackStack() },
                     onObjet = { navController.navigate(Routes.objetDetail(it)) },
+                    connected = connected,
                 )
             }
             composable(Routes.OBJET_DETAIL) {
-                ObjetDetailScreen(onBack = { navController.popBackStack() })
+                ObjetDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onEdit = { navController.navigate(Routes.editObjet(it)) },
+                    connected = connected,
+                )
+            }
+            composable(Routes.OBJET_EDIT) {
+                // Reuses the add stepper in edit mode (localId nav arg).
+                AddObjetScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.WINE) {
-                WineScreen(onBack = { navController.popBackStack() })
+                WineScreen(onBack = { navController.popBackStack() }, connected = connected)
             }
         }
     }

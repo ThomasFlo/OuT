@@ -126,7 +126,8 @@ class ObjetSearchResult(ObjetOut):
 class SearchRequest(BaseModel):
     query: str
     limit: int = 20
-    threshold: float = 0.4
+    # None -> server falls back to the configured SEMANTIC_THRESHOLD default.
+    threshold: float | None = None
 
 
 # ----- WebSocket sync event -----

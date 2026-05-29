@@ -8,12 +8,16 @@ import com.homestock.data.local.ObjetEntity
 import com.homestock.data.local.ZoneEntity
 import com.homestock.data.repository.HomeStockRepository
 import com.homestock.data.repository.SettingsRepository
+import com.homestock.domain.model.SearchResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -51,6 +55,7 @@ data class AddFormState(
     val saving: Boolean = false,
     val uploading: Boolean = false,
     val error: String? = null,
+    val isEditing: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -77,13 +82,98 @@ class AddObjetViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Auto-suggest similar existing objects as the name is typed (debounced
+    // semantic search). Lets the user reuse an existing category/location.
+    private val _suggestions = MutableStateFlow<List<SearchResult>>(emptyList())
+    val suggestions: StateFlow<List<SearchResult>> = _suggestions.asStateFlow()
+
     private var currentUser: String = "Utilisateur 1"
+    // Set when editing an existing object: lets us preserve server id and
+    // creation date across the save instead of creating a new row.
+    private var editingEntity: ObjetEntity? = null
 
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { currentUser = it.currentUser }
         }
-        // Apply voice prefill if present.
+        val editLocalId = savedStateHandle.get<String>("localId")?.toLongOrNull()
+        if (editLocalId != null) {
+            loadForEdit(editLocalId)
+        } else {
+            applyVoicePrefill(savedStateHandle)
+        }
+        observeNameSuggestions()
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun observeNameSuggestions() {
+        viewModelScope.launch {
+            _state
+                .map { it.nom }
+                .distinctUntilChanged()
+                .debounce(250)
+                .collect { nom ->
+                    _suggestions.value = if (nom.trim().length >= 2 && !_state.value.isEditing) {
+                        runCatching { repository.search(nom).take(5) }.getOrDefault(emptyList())
+                    } else {
+                        emptyList()
+                    }
+                }
+        }
+    }
+
+    /** Reuse an existing object's category & location when picking a suggestion. */
+    fun applySuggestion(result: SearchResult) {
+        _suggestions.value = emptyList()
+        viewModelScope.launch {
+            val zoneId = repository.getEmplacement(result.objet.emplacementId)?.zoneId
+            selectedZone.value = zoneId
+            _state.update {
+                it.copy(
+                    nom = result.objet.nom,
+                    categorie = result.objet.categorie,
+                    sousCategorie = result.objet.sousCategorie.orEmpty(),
+                    zoneId = zoneId,
+                    emplacementId = result.objet.emplacementId,
+                )
+            }
+        }
+    }
+
+    private fun loadForEdit(localId: Long) {
+        viewModelScope.launch {
+            val obj = repository.getObjet(localId) ?: return@launch
+            editingEntity = obj
+            selectedZone.value = repository.getEmplacement(obj.emplacementId)?.zoneId
+            _state.update {
+                it.copy(
+                    isEditing = true,
+                    nom = obj.nom,
+                    categorie = obj.categorie,
+                    sousCategorie = obj.sousCategorie.orEmpty(),
+                    photoObjetUrl = obj.photoUrl,
+                    zoneId = selectedZone.value,
+                    emplacementId = obj.emplacementId,
+                    quantite = obj.quantite?.toString().orEmpty(),
+                    unite = obj.unite.orEmpty(),
+                    etat = obj.etat,
+                    dateExpiration = obj.dateExpiration,
+                    notes = obj.notes.orEmpty(),
+                    vinAppellation = obj.vinAppellation.orEmpty(),
+                    vinDomaine = obj.vinDomaine.orEmpty(),
+                    vinMillesime = obj.vinMillesime?.toString().orEmpty(),
+                    vinType = obj.vinType.orEmpty(),
+                    vinNombreBouteilles = obj.vinNombreBouteilles?.toString().orEmpty(),
+                    vinEmplacementRangee = obj.vinEmplacementRangee.orEmpty(),
+                    vinNotesDegustation = obj.vinNotesDegustation.orEmpty(),
+                    vinPrixAchat = obj.vinPrixAchat?.toString().orEmpty(),
+                    vinABoirePartir = obj.vinABoirePartir?.toString().orEmpty(),
+                )
+            }
+        }
+    }
+
+    private fun applyVoicePrefill(savedStateHandle: SavedStateHandle) {
         fun decode(key: String) = savedStateHandle.get<String>(key)
             ?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
         val nom = decode("nom")
@@ -160,7 +250,13 @@ class AddObjetViewModel @Inject constructor(
         }
     }
 
-    private fun buildEntity(s: AddFormState, emplacementId: Long) = ObjetEntity(
+    private fun buildEntity(s: AddFormState, emplacementId: Long): ObjetEntity {
+        val base = editingEntity
+        return ObjetEntity(
+        // Preserve identity when editing so we update instead of inserting.
+        localId = base?.localId ?: 0,
+        serverId = base?.serverId,
+        dateAjout = base?.dateAjout ?: System.currentTimeMillis(),
         nom = s.nom,
         emplacementId = emplacementId,
         categorie = s.categorie,
@@ -181,5 +277,6 @@ class AddObjetViewModel @Inject constructor(
         vinNotesDegustation = s.vinNotesDegustation.ifBlank { null },
         vinPrixAchat = s.vinPrixAchat.toDoubleOrNull(),
         vinABoirePartir = s.vinABoirePartir.toIntOrNull(),
-    )
+        )
+    }
 }

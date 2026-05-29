@@ -39,6 +39,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.homestock.ui.components.CameraCapture
+import com.homestock.ui.components.rememberConfirmHaptic
 import com.homestock.domain.model.Categories
 
 private enum class CameraTarget { NONE, OBJET, EMPLACEMENT }
@@ -52,6 +53,7 @@ fun AddObjetScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var cameraTarget by remember { mutableStateOf(CameraTarget.NONE) }
     val cameraPermission = rememberPermissionState(android.Manifest.permission.CAMERA)
+    val confirmHaptic = rememberConfirmHaptic()
 
     LaunchedEffect(cameraTarget) {
         if (cameraTarget != CameraTarget.NONE && !cameraPermission.status.isGranted) {
@@ -74,7 +76,10 @@ fun AddObjetScreen(
     Scaffold(
         topBar = {
             androidx.compose.material3.TopAppBar(
-                title = { Text("Ajouter un objet — étape ${state.step + 1}/4") },
+                title = {
+                    val verb = if (state.isEditing) "Modifier" else "Ajouter"
+                    Text("$verb un objet — étape ${state.step + 1}/4")
+                },
                 navigationIcon = {
                     IconButton(onClick = { if (state.step == 0) onDone() else viewModel.prevStep() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
@@ -98,10 +103,17 @@ fun AddObjetScreen(
                     }
                 } else {
                     Button(
-                        onClick = { viewModel.save(onDone) },
+                        onClick = { viewModel.save { confirmHaptic(); onDone() } },
                         enabled = !state.saving,
                         modifier = Modifier.weight(1f),
-                    ) { Text(if (state.saving) "Enregistrement…" else "Enregistrer") }
+                    ) {
+                        val label = when {
+                            state.saving -> "Enregistrement…"
+                            state.isEditing -> "Mettre à jour"
+                            else -> "Enregistrer"
+                        }
+                        Text(label)
+                    }
                 }
             }
         },

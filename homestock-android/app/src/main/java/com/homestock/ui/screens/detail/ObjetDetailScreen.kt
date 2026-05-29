@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,15 +34,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.homestock.domain.model.Categories
+import com.homestock.ui.components.ConnectionDot
+import com.homestock.ui.components.rememberConfirmHaptic
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ObjetDetailScreen(
     onBack: () -> Unit,
+    onEdit: (Long) -> Unit,
+    connected: Boolean = true,
     viewModel: ObjetDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val objet = state.objet
+    val confirmHaptic = rememberConfirmHaptic()
 
     Scaffold(
         topBar = {
@@ -53,7 +59,13 @@ fun ObjetDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.delete(onBack) }) {
+                    ConnectionDot(connected, Modifier.padding(end = 8.dp))
+                    objet?.let { o ->
+                        IconButton(onClick = { onEdit(o.localId) }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Modifier")
+                        }
+                    }
+                    IconButton(onClick = { confirmHaptic(); viewModel.delete(onBack) }) {
                         Icon(Icons.Filled.Delete, contentDescription = "Supprimer")
                     }
                 },
@@ -109,7 +121,9 @@ fun ObjetDetailScreen(
                 objet.vinMillesime?.let { DetailRow("Millésime", it.toString()) }
                 objet.vinType?.let { DetailRow("Type", it) }
                 objet.vinNombreBouteilles?.let { DetailRow("Bouteilles", it.toString()) }
-                Button(onClick = viewModel::openBottle) { Text("Je débouche une bouteille") }
+                Button(onClick = { confirmHaptic(); viewModel.openBottle() }) {
+                    Text("Je débouche une bouteille")
+                }
             }
         }
     }

@@ -33,16 +33,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homestock.domain.model.WineTypes
+import com.homestock.ui.components.ConnectionDot
+import com.homestock.ui.components.rememberConfirmHaptic
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WineScreen(
     onBack: () -> Unit,
+    connected: Boolean = true,
     viewModel: WineViewModel = hiltViewModel(),
 ) {
     val wines by viewModel.wines.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
     val typeFilter by viewModel.typeFilter.collectAsStateWithLifecycle()
+    val confirmHaptic = rememberConfirmHaptic()
 
     val filtered = wines.filter { typeFilter == null || it.vinType == typeFilter }
 
@@ -55,6 +59,7 @@ fun WineScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
                 },
+                actions = { ConnectionDot(connected, Modifier.padding(end = 12.dp)) },
             )
         },
     ) { padding ->
@@ -121,7 +126,7 @@ fun WineScreen(
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             Text("${wine.vinNombreBouteilles ?: 0} bouteille(s)")
                             Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { viewModel.openBottle(wine) }) {
+                            TextButton(onClick = { confirmHaptic(); viewModel.openBottle(wine) }) {
                                 Text("Déboucher")
                             }
                         }

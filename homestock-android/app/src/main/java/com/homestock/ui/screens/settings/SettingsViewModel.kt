@@ -58,6 +58,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setNotificationsEnabled(enabled) }
     }
 
+    fun setDebugMode(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setDebugMode(enabled) }
+    }
+
     fun addZone(nom: String) {
         viewModelScope.launch {
             runCatching { repository.createZone(nom, "home", "#4A90D9") }

@@ -22,6 +22,7 @@ data class AppSettings(
     val voiceLanguage: String = "fr-FR",
     val notificationsEnabled: Boolean = true,
     val setupCompleted: Boolean = false,
+    val debugMode: Boolean = false,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -35,6 +36,7 @@ class SettingsRepository(private val context: Context) {
         val LANG = stringPreferencesKey("voice_lang")
         val NOTIF = booleanPreferencesKey("notifications")
         val SETUP = booleanPreferencesKey("setup_completed")
+        val DEBUG = booleanPreferencesKey("debug_mode")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -47,6 +49,7 @@ class SettingsRepository(private val context: Context) {
             voiceLanguage = p[Keys.LANG] ?: "fr-FR",
             notificationsEnabled = p[Keys.NOTIF] ?: true,
             setupCompleted = p[Keys.SETUP] ?: false,
+            debugMode = p[Keys.DEBUG] ?: false,
         )
     }
 
@@ -74,5 +77,9 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setSetupCompleted(done: Boolean) = context.dataStore.edit {
         it[Keys.SETUP] = done
+    }
+
+    suspend fun setDebugMode(enabled: Boolean) = context.dataStore.edit {
+        it[Keys.DEBUG] = enabled
     }
 }

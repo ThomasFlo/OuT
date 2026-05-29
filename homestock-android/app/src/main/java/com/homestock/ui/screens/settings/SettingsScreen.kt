@@ -137,6 +137,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 onCheckedChange = viewModel::setNotificationsEnabled,
             )
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Mode debug (scores de recherche)", Modifier.weight(1f))
+            Switch(
+                checked = current.debugMode,
+                onCheckedChange = viewModel::setDebugMode,
+            )
+        }
 
         HorizontalDivider()
         Text("Gestion des zones", fontWeight = FontWeight.SemiBold)
