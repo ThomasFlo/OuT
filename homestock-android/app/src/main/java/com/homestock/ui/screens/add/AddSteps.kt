@@ -61,7 +61,9 @@ private fun Dropdown(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.fillMaxWidth().menuAnchor(),
         )
-        androidx.compose.material3.ExposedDropdownMenu(
+        // ExposedDropdownMenu is an extension on ExposedDropdownMenuBoxScope,
+        // so it must be called unqualified from inside the box's content lambda.
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
