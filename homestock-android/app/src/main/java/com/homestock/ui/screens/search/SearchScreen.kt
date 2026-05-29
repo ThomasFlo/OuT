@@ -40,6 +40,7 @@ import com.homestock.ui.components.ZoneCard
 fun SearchScreen(
     connected: Boolean,
     onObjet: (Long) -> Unit,
+    onZone: (Long) -> Unit,
     onAdd: () -> Unit,
     onAddVoice: (String?, Long?, String?, Int?) -> Unit,
     onRetrySync: () -> Unit,
@@ -102,7 +103,7 @@ fun SearchScreen(
             if (query.isNotBlank()) {
                 SearchResults(searching, results, viewModel, onObjet)
             } else {
-                Dashboard(zones, recent, expiring, viewModel, onObjet)
+                Dashboard(zones, recent, expiring, viewModel, onObjet, onZone)
             }
         }
 
@@ -163,6 +164,7 @@ private fun Dashboard(
     expiring: List<com.homestock.data.local.ObjetEntity>,
     viewModel: SearchViewModel,
     onObjet: (Long) -> Unit,
+    onZone: (Long) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize()) {
         if (expiring.isNotEmpty()) {
@@ -189,7 +191,7 @@ private fun Dashboard(
         }
         item { SectionHeader("Zones") }
         items(zones) { z ->
-            ZoneCard(z.nom, z.couleur, z.nbObjets, onClick = {})
+            ZoneCard(z.nom, z.couleur, z.nbObjets, onClick = { onZone(z.id) })
         }
     }
 }

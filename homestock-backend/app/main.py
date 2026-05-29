@@ -1,7 +1,7 @@
 """HomeStock FastAPI application: REST API, WebSocket sync, startup seeding."""
 import logging
 
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -65,6 +65,10 @@ async def on_startup() -> None:
         seed_zones(db)
     finally:
         db.close()
+    # Calibrate the IVFFlat index against current row stats so the first
+    # semantic search after a fresh install isn't a sequential scan.
+    with engine.begin() as conn:
+        conn.execute(text("ANALYZE objets"))
     log.info("HomeStock API ready.")
 
 
@@ -132,9 +136,37 @@ def export_data(db: Session = Depends(get_db)):
 
 
 @app.post("/import")
-def import_data(payload: dict, db: Session = Depends(get_db)):
-    """Import a previously exported JSON dump (merges by re-creating rows)."""
+def import_data(
+    payload: dict,
+    replace: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Import a previously exported JSON dump.
+
+    By default the import is rejected if the database already contains data,
+    to avoid creating silent duplicates on repeated imports. Pass
+    ``?replace=true`` to wipe zones / emplacements / objets / vins first.
+    """
     from .routers.objects import _apply_embedding
+
+    if replace:
+        # FK cascades take care of emplacements / objets / vins.
+        db.query(models.Vin).delete()
+        db.query(models.Objet).delete()
+        db.query(models.Emplacement).delete()
+        db.query(models.Zone).delete()
+        db.flush()
+    else:
+        existing = (
+            db.query(models.Zone).count()
+            + db.query(models.Objet).count()
+        )
+        if existing:
+            raise HTTPException(
+                409,
+                "La base contient déjà des données. "
+                "Utilisez ?replace=true pour écraser.",
+            )
 
     id_map_zone: dict[int, int] = {}
     id_map_emp: dict[int, int] = {}

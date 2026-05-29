@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -105,7 +105,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
         }
 
-        Divider()
+        HorizontalDivider()
         Text("Profil courant", fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(current.user1, current.user2).filter { it.isNotBlank() }.forEach { name ->
@@ -117,7 +117,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
         }
 
-        Divider()
+        HorizontalDivider()
         Text("Reconnaissance vocale", fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("fr-FR" to "Français", "en-US" to "English").forEach { (code, label) ->
@@ -129,7 +129,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
         }
 
-        Divider()
+        HorizontalDivider()
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Notifications d'expiration", Modifier.weight(1f))
             Switch(
@@ -138,7 +138,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             )
         }
 
-        Divider()
+        HorizontalDivider()
         Text("Gestion des zones", fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -164,7 +164,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
         }
 
-        Divider()
+        HorizontalDivider()
         Text("Sauvegarde", fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { exportLauncher.launch("homestock-export.json") }) {

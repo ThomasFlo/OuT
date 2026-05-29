@@ -88,6 +88,7 @@ private fun MainScaffold(viewModel: MainViewModel) {
                 SearchScreen(
                     connected = connected,
                     onObjet = { navController.navigate(Routes.objetDetail(it)) },
+                    onZone = { navController.navigate(Routes.zoneDetail(it)) },
                     onAdd = { navController.navigate(Routes.ADD) },
                     onAddVoice = { nom, zoneId, emp, qty ->
                         navController.navigate(Routes.addPrefill(nom, zoneId, emp, qty))

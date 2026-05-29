@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
@@ -7,6 +9,7 @@ from ..services.embedding import build_embedding_text, embed_one
 from ..services.websocket import broadcast_sync
 
 router = APIRouter(prefix="/objets", tags=["objets"])
+log = logging.getLogger("homestock.objects")
 
 
 def _apply_embedding(obj: models.Objet) -> None:
@@ -19,6 +22,12 @@ def _apply_embedding(obj: models.Objet) -> None:
     vector = embed_one(text)
     if vector is not None:
         obj.nom_embedding = vector
+    else:
+        # Surface the embeddings outage so it doesn't silently degrade search.
+        log.warning(
+            "Embedding service unavailable for object %r; falling back to full-text only",
+            obj.nom,
+        )
 
 
 def _upsert_vin(db: Session, obj: models.Objet, vin_data: schemas.VinBase) -> None:

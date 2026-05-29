@@ -79,18 +79,22 @@ class HomeStockRepository @Inject constructor(
         pushPending()
         val zones = api.getZones().map { it.toEntity() }
         zoneDao.upsertAll(zones)
-        zoneDao.deleteMissing(zones.map { it.id }.ifEmpty { listOf(-1) })
+        // Guard: if the server returns nothing (transient error or fresh install),
+        // do NOT wipe the local cache.
+        if (zones.isNotEmpty()) zoneDao.deleteMissing(zones.map { it.id })
 
         val emplacements = api.getEmplacements().map { it.toEntity() }
         emplacementDao.upsertAll(emplacements)
-        emplacementDao.deleteMissing(emplacements.map { it.id }.ifEmpty { listOf(-1) })
+        if (emplacements.isNotEmpty()) {
+            emplacementDao.deleteMissing(emplacements.map { it.id })
+        }
 
         val objets = api.getObjets()
         for (dto in objets) {
             val existing = objetDao.getByServerId(dto.id)
             objetDao.insert(dto.toEntity(existing?.localId ?: 0))
         }
-        objetDao.deleteMissing(objets.map { it.id }.ifEmpty { listOf(-1) })
+        if (objets.isNotEmpty()) objetDao.deleteMissing(objets.map { it.id })
 
         runCatching { _categories.value = api.getCategories() }
     }

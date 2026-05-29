@@ -9,6 +9,7 @@ import com.homestock.notifications.ExpirationNotifier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -27,15 +28,24 @@ class MainViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            settingsRepository.settings.collect { s ->
-                repository.updateNas(s.nasHost, s.nasPort)
-                if (s.setupCompleted) {
-                    runCatching { repository.refreshAll() }
-                    if (s.notificationsEnabled) {
-                        runCatching { expirationNotifier.notify(repository.expiringWithin(3)) }
+            // Only react when fields that actually matter for sync/notif change,
+            // otherwise unrelated edits (renaming a user, switching profile…)
+            // would re-trigger a full refresh and a duplicate notification.
+            settingsRepository.settings
+                .distinctUntilChangedBy {
+                    listOf(it.nasHost, it.nasPort, it.notificationsEnabled, it.setupCompleted)
+                }
+                .collect { s ->
+                    repository.updateNas(s.nasHost, s.nasPort)
+                    if (s.setupCompleted) {
+                        runCatching { repository.refreshAll() }
+                        if (s.notificationsEnabled) {
+                            runCatching {
+                                expirationNotifier.notify(repository.expiringWithin(3))
+                            }
+                        }
                     }
                 }
-            }
         }
     }
 
