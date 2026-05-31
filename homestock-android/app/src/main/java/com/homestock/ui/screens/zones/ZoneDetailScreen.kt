@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,9 +19,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -45,13 +48,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.homestock.data.local.EmplacementEntity
+import com.homestock.ui.components.CameraCapture
 import com.homestock.ui.components.ConnectionDot
 import com.homestock.ui.components.ObjetResultCard
+import com.homestock.ui.components.PhotoThumbnail
 import com.homestock.ui.components.SectionHeader
 import com.homestock.util.matchesAllTerms
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ZoneDetailScreen(
     onBack: () -> Unit,
@@ -63,19 +71,36 @@ fun ZoneDetailScreen(
     val emplacements by viewModel.emplacements.collectAsStateWithLifecycle()
     val zoneNom by viewModel.zoneNom.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val draft by viewModel.draft.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var categoryFilter by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var editingEmp by remember { mutableStateOf<EmplacementEntity?>(null) }
     var confirmDeleteEmp by remember { mutableStateOf<EmplacementEntity?>(null) }
+    var capturingPhoto by remember { mutableStateOf(false) }
+    val cameraPermission = rememberPermissionState(android.Manifest.permission.CAMERA)
 
     LaunchedEffect(message) {
         message?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viewModel.clearMessage()
         }
+    }
+
+    LaunchedEffect(capturingPhoto) {
+        if (capturingPhoto && !cameraPermission.status.isGranted) {
+            cameraPermission.launchPermissionRequest()
+        }
+    }
+
+    // Full-screen camera, shown when the user taps "Photo" inside the draft
+    // dialog. On capture we hand the bytes to the VM and return to the dialog.
+    if (capturingPhoto && cameraPermission.status.isGranted) {
+        CameraCapture(onCaptured = { bytes ->
+            viewModel.uploadDraftPhoto(bytes)
+            capturingPhoto = false
+        })
+        return
     }
 
     val categories = remember(objets) { objets.map { it.categorie }.distinct().sorted() }
@@ -153,7 +178,7 @@ fun ZoneDetailScreen(
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { showAddDialog = true }) {
+                    TextButton(onClick = { viewModel.startCreateEmplacement() }) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
                         Text("Nouveau")
@@ -164,11 +189,22 @@ fun ZoneDetailScreen(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { editingEmp = emp }
+                        .clickable { viewModel.startEditEmplacement(emp) }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(emp.nomEmplacement, Modifier.weight(1f))
+                    PhotoThumbnail(viewModel.photoUrl(emp.photoUrl), size = 40)
+                    if (!emp.photoUrl.isNullOrBlank()) Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(emp.nomEmplacement)
+                        emp.description?.takeIf { it.isNotBlank() }?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     val count = objets.count { it.emplacementId == emp.id }
                     Text(
                         "$count",
@@ -201,69 +237,22 @@ fun ZoneDetailScreen(
         }
     }
 
-    if (showAddDialog) {
-        var newName by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("Nouvel emplacement") },
-            text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Nom") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+    draft?.let { d ->
+        EmplacementDraftDialog(
+            draft = d,
+            photoUrl = viewModel.photoUrl(d.photoUrl),
+            isEditing = d.id != null,
+            onNameChange = { name -> viewModel.updateDraft { it.copy(nom = name) } },
+            onDescriptionChange = { desc -> viewModel.updateDraft { it.copy(description = desc) } },
+            onTakePhoto = { capturingPhoto = true },
+            onRemovePhoto = { viewModel.removeDraftPhoto() },
+            onSave = { viewModel.saveDraft() },
+            onDelete = {
+                // Switch to the delete flow for the persisted emplacement.
+                emplacements.firstOrNull { it.id == d.id }?.let { confirmDeleteEmp = it }
+                viewModel.cancelDraft()
             },
-            confirmButton = {
-                TextButton(
-                    enabled = newName.isNotBlank(),
-                    onClick = {
-                        viewModel.addEmplacement(newName)
-                        showAddDialog = false
-                    },
-                ) { Text("Créer") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) { Text("Annuler") }
-            },
-        )
-    }
-
-    editingEmp?.let { emp ->
-        var editedName by remember(emp.id) { mutableStateOf(emp.nomEmplacement) }
-        AlertDialog(
-            onDismissRequest = { editingEmp = null },
-            title = { Text(emp.nomEmplacement) },
-            text = {
-                OutlinedTextField(
-                    value = editedName,
-                    onValueChange = { editedName = it },
-                    label = { Text("Nom de l'emplacement") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.renameEmplacement(emp, editedName)
-                    editingEmp = null
-                }) { Text("Enregistrer") }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = {
-                            confirmDeleteEmp = emp
-                            editingEmp = null
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) { Text("Supprimer") }
-                    TextButton(onClick = { editingEmp = null }) { Text("Annuler") }
-                }
-            },
+            onDismiss = { viewModel.cancelDraft() },
         )
     }
 
@@ -283,6 +272,89 @@ fun ZoneDetailScreen(
             onDismiss = { confirmDeleteEmp = null },
         )
     }
+}
+
+/**
+ * Create / edit dialog for an emplacement, including an optional photo and
+ * free-text description. The photo is captured full-screen (the host screen
+ * swaps to the camera), so the draft state lives in the ViewModel to survive
+ * that round-trip.
+ */
+@Composable
+private fun EmplacementDraftDialog(
+    draft: EmplacementDraft,
+    photoUrl: String?,
+    isEditing: Boolean,
+    onNameChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onTakePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+    onSave: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isEditing) "Modifier l'emplacement" else "Nouvel emplacement") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = draft.nom,
+                    onValueChange = onNameChange,
+                    label = { Text("Nom") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = draft.description,
+                    onValueChange = onDescriptionChange,
+                    label = { Text("Description (optionnel)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (draft.uploading) {
+                        CircularProgressIndicator(Modifier.size(40.dp))
+                    } else if (!photoUrl.isNullOrBlank()) {
+                        PhotoThumbnail(photoUrl, size = 56)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        TextButton(onClick = onTakePhoto) {
+                            Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (draft.photoUrl.isNullOrBlank()) "Ajouter une photo" else "Reprendre")
+                        }
+                        if (!draft.photoUrl.isNullOrBlank()) {
+                            TextButton(
+                                onClick = onRemovePhoto,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) { Text("Retirer la photo") }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = draft.nom.isNotBlank() && !draft.uploading, onClick = onSave) {
+                Text("Enregistrer")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isEditing) {
+                    TextButton(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("Supprimer") }
+                }
+                TextButton(onClick = onDismiss) { Text("Annuler") }
+            }
+        },
+    )
 }
 
 /**
