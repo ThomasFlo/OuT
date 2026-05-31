@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.homestock.data.local.ZoneEntity
 import com.homestock.data.remote.dto.AppVersionDto
+import com.homestock.data.remote.dto.CategoryDto
 import com.homestock.data.repository.AppSettings
 import com.homestock.data.repository.HomeStockRepository
 import com.homestock.data.repository.SettingsRepository
@@ -34,6 +35,7 @@ class SettingsViewModel @Inject constructor(
 
     init {
         refreshServerVersion()
+        viewModelScope.launch { runCatching { repository.refreshCategories() } }
     }
 
     fun refreshServerVersion() {
@@ -44,6 +46,9 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val zones: StateFlow<List<ZoneEntity>> = repository.observeZones()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val categories: StateFlow<List<CategoryDto>> = repository.categoriesDetailed
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _testResult = MutableStateFlow<Boolean?>(null)
@@ -119,6 +124,44 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repository.migrateZone(source.id, targetZoneId, deleteSource = true) }
                 .onSuccess { _message.value = "Zone supprimée, contenu transféré" }
+                .onFailure { _message.value = "Migration échouée : ${it.message}" }
+        }
+    }
+
+    // ----- Category management -----
+
+    fun addCategory(nom: String) {
+        if (nom.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repository.createCategory(nom.trim()) }
+                .onSuccess { _message.value = "Catégorie créée" }
+                .onFailure { _message.value = "Échec : ${it.message}" }
+        }
+    }
+
+    fun renameCategory(category: CategoryDto, newNom: String) {
+        val trimmed = newNom.trim()
+        if (trimmed.isBlank() || trimmed == category.nom) return
+        viewModelScope.launch {
+            runCatching { repository.renameCategory(category.id, trimmed) }
+                .onFailure { _message.value = "Échec : ${it.message}" }
+        }
+    }
+
+    fun deleteCategory(category: CategoryDto) {
+        viewModelScope.launch {
+            runCatching { repository.deleteCategory(category.id) }
+                .onSuccess { _message.value = "Catégorie supprimée" }
+                .onFailure { _message.value = "Suppression refusée : ${it.message}" }
+        }
+    }
+
+    fun migrateAndDeleteCategory(source: CategoryDto, targetCategoryId: Long) {
+        viewModelScope.launch {
+            runCatching {
+                repository.migrateCategory(source.id, targetCategoryId, deleteSource = true)
+            }
+                .onSuccess { _message.value = "Catégorie supprimée, objets réaffectés" }
                 .onFailure { _message.value = "Migration échouée : ${it.message}" }
         }
     }

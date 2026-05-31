@@ -9,6 +9,8 @@ import com.homestock.data.local.ZoneEntity
 import com.homestock.data.remote.ApiService
 import com.homestock.data.remote.HostSelectionInterceptor
 import com.homestock.data.remote.RealtimeClient
+import com.homestock.data.remote.dto.CategoryDto
+import com.homestock.data.remote.dto.CategoryRequest
 import com.homestock.data.remote.dto.EmplacementRequest
 import com.homestock.data.remote.dto.SearchRequest
 import com.homestock.data.remote.dto.WineStats
@@ -42,6 +44,12 @@ class HomeStockRepository @Inject constructor(
 
     private val _categories = MutableStateFlow(Categories.ALL)
     val categories: StateFlow<List<String>> = _categories.asStateFlow()
+
+    // Richer category list (id + protected flag + object count) for the
+    // management screen. Categories are not cached in Room, so this is an
+    // in-memory snapshot refreshed from the server.
+    private val _categoriesDetailed = MutableStateFlow<List<CategoryDto>>(emptyList())
+    val categoriesDetailed: StateFlow<List<CategoryDto>> = _categoriesDetailed.asStateFlow()
 
     init {
         // Any server-side change triggers a local refresh.
@@ -97,7 +105,43 @@ class HomeStockRepository @Inject constructor(
         }
         if (objets.isNotEmpty()) objetDao.deleteMissing(objets.map { it.id })
 
-        runCatching { _categories.value = api.getCategories() }
+        runCatching {
+            val cats = api.getCategoryList()
+            _categoriesDetailed.value = cats
+            _categories.value = cats.map { it.nom }
+        }.onFailure {
+            // Fall back to the legacy flat endpoint if the new one is missing.
+            runCatching { _categories.value = api.getCategories() }
+        }
+    }
+
+    /** Pull just the detailed category list (used by the management screen). */
+    suspend fun refreshCategories() {
+        runCatching {
+            val cats = api.getCategoryList()
+            _categoriesDetailed.value = cats
+            _categories.value = cats.map { it.nom }
+        }
+    }
+
+    suspend fun createCategory(nom: String) {
+        api.createCategory(CategoryRequest(nom))
+        refreshCategories()
+    }
+
+    suspend fun renameCategory(id: Long, nom: String) {
+        api.updateCategory(id, CategoryRequest(nom))
+        refreshAll()
+    }
+
+    suspend fun deleteCategory(id: Long) {
+        api.deleteCategory(id)
+        refreshCategories()
+    }
+
+    suspend fun migrateCategory(sourceId: Long, targetId: Long, deleteSource: Boolean) {
+        api.migrateCategory(sourceId, targetId, deleteSource)
+        refreshAll()
     }
 
     /** Push locally-queued changes made while offline (last-write-wins server side). */

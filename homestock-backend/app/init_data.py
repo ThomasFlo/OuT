@@ -1,4 +1,5 @@
 """Default seed data: 21 zones and the predefined category list."""
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import models
@@ -51,6 +52,11 @@ DEFAULT_CATEGORIES = [
 ]
 
 
+# The wine category is special-cased by the apps (dedicated cellar screen),
+# so it must keep this exact label — it is seeded as protected.
+WINE_CATEGORY = "Boissons & cave à vins"
+
+
 def seed_zones(db: Session) -> None:
     """Insert the 21 default zones only if no zone exists yet."""
     existing = db.query(models.Zone).count()
@@ -58,4 +64,25 @@ def seed_zones(db: Session) -> None:
         return
     for order, (nom, icone, couleur) in enumerate(DEFAULT_ZONES):
         db.add(models.Zone(nom=nom, icone=icone, couleur=couleur, ordre=order))
+    db.commit()
+
+
+def seed_categories(db: Session) -> None:
+    """Ensure the categories table is populated.
+
+    Seeds the defaults when empty, then reconciles with any category label
+    already used by existing objects (so pre-existing or imported data with
+    custom categories shows up as a manageable category).
+    """
+    existing_names = {c.nom for c in db.query(models.Category.nom).all()}
+    if not existing_names:
+        for order, nom in enumerate(DEFAULT_CATEGORIES):
+            db.add(models.Category(nom=nom, ordre=order, protegee=(nom == WINE_CATEGORY)))
+            existing_names.add(nom)
+
+    used = {row[0] for row in db.query(models.Objet.categorie).distinct().all() if row[0]}
+    next_order = (db.query(func.max(models.Category.ordre)).scalar() or 0) + 1
+    for nom in sorted(used - existing_names):
+        db.add(models.Category(nom=nom, ordre=next_order, protegee=(nom == WINE_CATEGORY)))
+        next_order += 1
     db.commit()

@@ -12,6 +12,16 @@ data class AppVersionDto(
     val available: Boolean = false,
 )
 
+data class CategoryDto(
+    val id: Long,
+    val nom: String,
+    val ordre: Int = 0,
+    val protegee: Boolean = false,
+    @SerializedName("nb_objets") val nbObjets: Int = 0,
+)
+
+data class CategoryRequest(val nom: String)
+
 data class ZoneDto(
     val id: Long,
     val nom: String,

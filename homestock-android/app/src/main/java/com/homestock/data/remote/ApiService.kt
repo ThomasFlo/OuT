@@ -1,6 +1,8 @@
 package com.homestock.data.remote
 
 import com.homestock.data.remote.dto.AppVersionDto
+import com.homestock.data.remote.dto.CategoryDto
+import com.homestock.data.remote.dto.CategoryRequest
 import com.homestock.data.remote.dto.EmplacementDto
 import com.homestock.data.remote.dto.EmplacementRequest
 import com.homestock.data.remote.dto.ObjetDto
@@ -50,6 +52,26 @@ interface ApiService {
 
     @GET("zones/categories")
     suspend fun getCategories(): List<String>
+
+    // Categories (editable)
+    @GET("categories")
+    suspend fun getCategoryList(): List<CategoryDto>
+
+    @POST("categories")
+    suspend fun createCategory(@Body body: CategoryRequest): CategoryDto
+
+    @PUT("categories/{id}")
+    suspend fun updateCategory(@Path("id") id: Long, @Body body: CategoryRequest): CategoryDto
+
+    @DELETE("categories/{id}")
+    suspend fun deleteCategory(@Path("id") id: Long)
+
+    @POST("categories/{id}/migrate")
+    suspend fun migrateCategory(
+        @Path("id") sourceId: Long,
+        @Query("target_id") targetId: Long,
+        @Query("delete_source") deleteSource: Boolean,
+    )
 
     // Emplacements
     @GET("emplacements")

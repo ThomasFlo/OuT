@@ -125,5 +125,16 @@ def migrate_zone(
 
 
 @router.get("/categories", response_model=list[str], tags=["categories"])
-def list_categories():
-    return DEFAULT_CATEGORIES
+def list_categories(db: Session = Depends(get_db)):
+    """Legacy endpoint: the flat list of category names.
+
+    Kept for backward compatibility (older app builds call this). New clients
+    use the richer /categories router. Falls back to the static defaults if the
+    table has not been seeded yet.
+    """
+    rows = (
+        db.query(models.Category.nom)
+        .order_by(models.Category.ordre, models.Category.id)
+        .all()
+    )
+    return [r[0] for r in rows] if rows else DEFAULT_CATEGORIES

@@ -4,6 +4,24 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+# ----- Categories -----
+class CategoryCreate(BaseModel):
+    nom: str
+
+
+class CategoryUpdate(BaseModel):
+    nom: str
+
+
+class CategoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    nom: str
+    ordre: int = 0
+    protegee: bool = False
+    nb_objets: int = 0
+
+
 # ----- Zones -----
 class ZoneBase(BaseModel):
     nom: str

@@ -46,12 +46,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homestock.data.local.ZoneEntity
+import com.homestock.data.remote.dto.CategoryDto
 import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val zones by viewModel.zones.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     val testResult by viewModel.testResult.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -63,6 +65,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var newZone by remember { mutableStateOf("") }
     var editingZone by remember { mutableStateOf<ZoneEntity?>(null) }
     var confirmDeleteZone by remember { mutableStateOf<ZoneEntity?>(null) }
+    var newCategory by remember { mutableStateOf("") }
+    var editingCategory by remember { mutableStateOf<CategoryDto?>(null) }
+    var confirmDeleteCategory by remember { mutableStateOf<CategoryDto?>(null) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -203,6 +208,56 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         }
 
         HorizontalDivider()
+        Text("Gestion des catégories", fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newCategory, onValueChange = { newCategory = it },
+                label = { Text("Nouvelle catégorie") }, modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = {
+                    if (newCategory.isNotBlank()) { viewModel.addCategory(newCategory); newCategory = "" }
+                },
+            ) { Text("Ajouter") }
+        }
+        Text(
+            "Touchez une catégorie pour la renommer ou la supprimer. " +
+                "Les catégories système (🔒) ne sont pas modifiables.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        categories.forEach { category ->
+            val editable = !category.protegee
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (editable) Modifier.clickable { editingCategory = category }
+                        else Modifier,
+                    )
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (category.protegee) "${category.nom}  🔒" else category.nom,
+                    Modifier.weight(1f),
+                )
+                Text("${category.nbObjets}")
+                Spacer(Modifier.width(8.dp))
+                if (editable) {
+                    IconButton(onClick = { editingCategory = category }) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = "Modifier",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider()
         Text("Sauvegarde", fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { exportLauncher.launch("homestock-export.json") }) {
@@ -282,6 +337,135 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             onDismiss = { confirmDeleteZone = null },
         )
     }
+
+    editingCategory?.let { category ->
+        var editedName by remember(category.id) { mutableStateOf(category.nom) }
+        AlertDialog(
+            onDismissRequest = { editingCategory = null },
+            title = { Text(category.nom) },
+            text = {
+                OutlinedTextField(
+                    value = editedName,
+                    onValueChange = { editedName = it },
+                    label = { Text("Nom de la catégorie") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.renameCategory(category, editedName)
+                    editingCategory = null
+                }) { Text("Enregistrer") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            confirmDeleteCategory = category
+                            editingCategory = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("Supprimer") }
+                    TextButton(onClick = { editingCategory = null }) { Text("Annuler") }
+                }
+            },
+        )
+    }
+
+    confirmDeleteCategory?.let { category ->
+        DeleteCategoryDialog(
+            category = category,
+            otherCategories = categories.filter { it.id != category.id },
+            onDeleteEmpty = {
+                viewModel.deleteCategory(category)
+                confirmDeleteCategory = null
+            },
+            onMigrateAndDelete = { targetId ->
+                viewModel.migrateAndDeleteCategory(category, targetId)
+                confirmDeleteCategory = null
+            },
+            onDismiss = { confirmDeleteCategory = null },
+        )
+    }
+}
+
+/**
+ * Confirmation dialog for deleting a category.
+ *
+ * Categories carry their object count in the DTO (no extra lookup needed).
+ * Empty category → simple destructive confirmation. Non-empty → forces the
+ * user to pick a target category onto which the objects are reassigned
+ * before the source is removed.
+ */
+@Composable
+private fun DeleteCategoryDialog(
+    category: CategoryDto,
+    otherCategories: List<CategoryDto>,
+    onDeleteEmpty: () -> Unit,
+    onMigrateAndDelete: (targetId: Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var targetId by remember(category.id) { mutableStateOf<Long?>(null) }
+    val count = category.nbObjets
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Supprimer « ${category.nom} » ?") },
+        text = {
+            when {
+                count == 0 -> Text("Cette catégorie est vide. La suppression est définitive.")
+                otherCategories.isEmpty() -> Text(
+                    "Cette catégorie contient $count objet${if (count > 1) "s" else ""}, " +
+                        "mais aucune autre catégorie n'existe pour les accueillir.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+                else -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Cette catégorie contient $count objet${if (count > 1) "s" else ""}. " +
+                            "Choisissez la catégorie qui les accueillera :",
+                    )
+                    otherCategories.forEach { candidate ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { targetId = candidate.id },
+                        ) {
+                            RadioButton(
+                                selected = targetId == candidate.id,
+                                onClick = { targetId = candidate.id },
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(candidate.nom)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when {
+                count == 0 -> TextButton(
+                    onClick = onDeleteEmpty,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Supprimer") }
+                else -> TextButton(
+                    enabled = targetId != null,
+                    onClick = { targetId?.let(onMigrateAndDelete) },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Réaffecter et supprimer") }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        },
+    )
 }
 
 /**
