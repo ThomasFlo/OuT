@@ -124,6 +124,25 @@ def migrate_zone(
         broadcast_sync("emplacement", "updated", target_id)
 
 
+@router.post("/reorder", status_code=204)
+def reorder_zones(payload: list[int], db: Session = Depends(get_db)):
+    """Apply a new order to existing zones.
+
+    Body is the list of zone IDs in their desired order. Each zone's
+    ``ordre`` column is set to its position in that list. IDs missing from
+    the payload keep their current ``ordre``. IDs that don't exist are
+    silently ignored, so a client racing with another delete won't break.
+    """
+    zones_by_id = {z.id: z for z in db.query(models.Zone).all()}
+    for position, zone_id in enumerate(payload):
+        zone = zones_by_id.get(zone_id)
+        if zone is not None:
+            zone.ordre = position
+    db.commit()
+    # One broadcast is enough — clients refetch the whole list on the event.
+    broadcast_sync("zone", "updated", 0)
+
+
 @router.get("/categories", response_model=list[str], tags=["categories"])
 def list_categories(db: Session = Depends(get_db)):
     """Legacy endpoint: the flat list of category names.

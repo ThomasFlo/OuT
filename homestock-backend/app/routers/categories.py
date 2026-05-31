@@ -152,3 +152,19 @@ def migrate_category(
         broadcast_sync("category", "deleted", cat_id)
     else:
         broadcast_sync("category", "updated", cat_id)
+
+
+@router.post("/reorder", status_code=204)
+def reorder_categories(payload: list[int], db: Session = Depends(get_db)):
+    """Apply a new order to existing categories.
+
+    Body is the list of category IDs in their desired order. Mirrors
+    POST /zones/reorder — see that endpoint for the contract.
+    """
+    cats_by_id = {c.id: c for c in db.query(models.Category).all()}
+    for position, cat_id in enumerate(payload):
+        cat = cats_by_id.get(cat_id)
+        if cat is not None:
+            cat.ordre = position
+    db.commit()
+    broadcast_sync("category", "updated", 0)

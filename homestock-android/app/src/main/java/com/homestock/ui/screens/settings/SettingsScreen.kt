@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -47,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homestock.data.local.ZoneEntity
 import com.homestock.data.remote.dto.CategoryDto
+import com.homestock.ui.components.ReorderableColumn
 import kotlinx.coroutines.launch
 
 @Composable
@@ -176,11 +178,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             ) { Text("Ajouter") }
         }
         Text(
-            "Touchez une zone pour la renommer ou la supprimer.",
+            "Touchez une zone pour la renommer ou la supprimer. " +
+                "Maintenez l'icône ⋮⋮ pour la réordonner.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        zones.forEach { zone ->
+        ReorderableColumn(
+            items = zones,
+            key = { it.id },
+            onReorder = { viewModel.reorderZones(it.map(ZoneEntity::id)) },
+        ) { zone, dragHandle ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -188,6 +195,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    Icons.Filled.DragHandle,
+                    contentDescription = "Réordonner",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = dragHandle.padding(end = 8.dp),
+                )
                 Text(
                     zone.nom,
                     Modifier.weight(1f),
@@ -223,11 +236,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         }
         Text(
             "Touchez une catégorie pour la renommer ou la supprimer. " +
+                "Maintenez l'icône ⋮⋮ pour la réordonner. " +
                 "Les catégories système (🔒) ne sont pas modifiables.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        categories.forEach { category ->
+        ReorderableColumn(
+            items = categories,
+            key = { it.id },
+            onReorder = { viewModel.reorderCategories(it.map(CategoryDto::id)) },
+        ) { category, dragHandle ->
             val editable = !category.protegee
             Row(
                 modifier = Modifier
@@ -239,6 +257,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    Icons.Filled.DragHandle,
+                    contentDescription = "Réordonner",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = dragHandle.padding(end = 8.dp),
+                )
                 Text(
                     if (category.protegee) "${category.nom}  🔒" else category.nom,
                     Modifier.weight(1f),

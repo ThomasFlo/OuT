@@ -144,6 +144,11 @@ class HomeStockRepository @Inject constructor(
         refreshAll()
     }
 
+    suspend fun reorderCategories(orderedIds: List<Long>) {
+        api.reorderCategories(orderedIds)
+        refreshCategories()
+    }
+
     /** Push locally-queued changes made while offline (last-write-wins server side). */
     private suspend fun pushPending() {
         for (pending in objetDao.getPending()) {
@@ -222,6 +227,11 @@ class HomeStockRepository @Inject constructor(
      */
     suspend fun migrateZone(sourceId: Long, targetId: Long, deleteSource: Boolean) {
         api.migrateZone(sourceId, targetId, deleteSource)
+        refreshAll()
+    }
+
+    suspend fun reorderZones(orderedIds: List<Long>) {
+        api.reorderZones(orderedIds)
         refreshAll()
     }
 

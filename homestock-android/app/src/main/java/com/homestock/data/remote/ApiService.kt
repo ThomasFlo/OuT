@@ -50,6 +50,9 @@ interface ApiService {
         @Query("delete_source") deleteSource: Boolean,
     )
 
+    @POST("zones/reorder")
+    suspend fun reorderZones(@Body orderedIds: List<Long>)
+
     @GET("zones/categories")
     suspend fun getCategories(): List<String>
 
@@ -72,6 +75,9 @@ interface ApiService {
         @Query("target_id") targetId: Long,
         @Query("delete_source") deleteSource: Boolean,
     )
+
+    @POST("categories/reorder")
+    suspend fun reorderCategories(@Body orderedIds: List<Long>)
 
     // Emplacements
     @GET("emplacements")

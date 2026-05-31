@@ -128,6 +128,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun reorderZones(orderedIds: List<Long>) {
+        viewModelScope.launch {
+            runCatching { repository.reorderZones(orderedIds) }
+                .onFailure { _message.value = "Réordonnancement échoué : ${it.message}" }
+        }
+    }
+
     // ----- Category management -----
 
     fun addCategory(nom: String) {
@@ -163,6 +170,13 @@ class SettingsViewModel @Inject constructor(
             }
                 .onSuccess { _message.value = "Catégorie supprimée, objets réaffectés" }
                 .onFailure { _message.value = "Migration échouée : ${it.message}" }
+        }
+    }
+
+    fun reorderCategories(orderedIds: List<Long>) {
+        viewModelScope.launch {
+            runCatching { repository.reorderCategories(orderedIds) }
+                .onFailure { _message.value = "Réordonnancement échoué : ${it.message}" }
         }
     }
 
