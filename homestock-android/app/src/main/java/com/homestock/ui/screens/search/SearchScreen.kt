@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +59,12 @@ fun SearchScreen(
     val debugMode by viewModel.debugMode.collectAsStateWithLifecycle()
     val confirmHaptic = rememberConfirmHaptic()
 
+    // Voice "où est X" emits a one-shot localId to navigate into the fiche
+    // after speaking the location aloud.
+    LaunchedEffect(Unit) {
+        viewModel.navigateToObjet.collect { localId -> onObjet(localId) }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Header with connection status.
@@ -91,6 +98,7 @@ fun SearchScreen(
                             confirmHaptic()
                             when (val intent = viewModel.classifyVoice(text)) {
                                 is VoiceIntent.Search -> viewModel.search(intent.query)
+                                is VoiceIntent.WhereIs -> viewModel.whereIs(intent.query)
                                 is VoiceIntent.Add -> onAddVoice(
                                     intent.command.nom,
                                     intent.command.zoneId,

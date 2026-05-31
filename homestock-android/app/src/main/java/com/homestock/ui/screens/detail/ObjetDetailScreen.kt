@@ -1,6 +1,8 @@
 package com.homestock.ui.screens.detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,15 +10,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +39,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,13 +52,27 @@ import coil.compose.AsyncImage
 import com.homestock.domain.model.Categories
 import com.homestock.ui.components.ConfirmDialog
 import com.homestock.ui.components.ConnectionDot
+import com.homestock.ui.components.ZoneIcons
+import com.homestock.ui.components.parseColor
 import com.homestock.ui.components.rememberConfirmHaptic
 
+/**
+ * Object detail screen, redesigned as a card-based fiche.
+ *
+ * The hero card prominently shows the location — emplacement photo when
+ * available, otherwise a coloured panel using the zone's colour with the
+ * zone icon — because "where is it?" is the dominant question.
+ * Underneath, an info card lists clickable chips (zone, emplacement,
+ * catégorie) that route the user back to the matching listings, plus the
+ * secondary attributes.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ObjetDetailScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onZone: (Long) -> Unit = {},
+    onCategory: (String) -> Unit = {},
     connected: Boolean = true,
     viewModel: ObjetDetailViewModel = hiltViewModel(),
 ) {
@@ -78,57 +105,66 @@ fun ObjetDetailScreen(
         },
     ) { padding ->
         if (objet == null) {
-            Column(Modifier.fillMaxSize().padding(padding), verticalArrangement = Arrangement.Center) {}
+            Box(Modifier.fillMaxSize().padding(padding)) {}
             return@Scaffold
         }
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Location, prominent.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Place,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.tertiary,
-                )
-                Spacer(Modifier.padding(4.dp))
-                Text(
-                    buildString {
-                        append(state.zoneNom ?: "—")
-                        if (!state.emplacementNom.isNullOrBlank()) append("  →  ${state.emplacementNom}")
-                    },
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            LocationHero(
+                zoneNom = state.zoneNom,
+                zoneIcone = state.zoneIcone,
+                zoneCouleur = state.zoneCouleur,
+                emplacementNom = state.emplacementNom,
+                emplacementDescription = state.emplacementDescription,
+                emplacementPhotoUrl = viewModel.photoUrl(state.emplacementPhotoUrl),
+                onClick = { state.zoneId?.let(onZone) },
+            )
 
-            DetailRow("Catégorie", objet.categorie)
-            objet.sousCategorie?.let { DetailRow("Sous-catégorie", it) }
-            objet.quantite?.let { DetailRow("Quantité", "$it ${objet.unite ?: ""}") }
-            objet.etat?.let { DetailRow("État", it) }
-            objet.notes?.let { DetailRow("Notes", it) }
-            objet.ajoutePar?.let { DetailRow("Ajouté par", it) }
+            InfoCard(
+                nom = objet.nom,
+                categorie = objet.categorie,
+                sousCategorie = objet.sousCategorie,
+                quantite = objet.quantite,
+                unite = objet.unite,
+                etat = objet.etat,
+                notes = objet.notes,
+                ajoutePar = objet.ajoutePar,
+                zoneNom = state.zoneNom,
+                onZoneClick = { state.zoneId?.let(onZone) },
+                onCategoryClick = { onCategory(objet.categorie) },
+            )
 
             viewModel.photoUrl(objet.photoUrl)?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                ) {
+                    AsyncImage(
+                        model = url,
+                        contentDescription = "Photo de l'objet",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().height(220.dp),
+                    )
+                }
             }
 
             if (objet.categorie == Categories.WINE) {
-                Spacer(Modifier.height(8.dp))
-                Text("Vin", style = MaterialTheme.typography.titleMedium)
-                objet.vinAppellation?.let { DetailRow("Appellation", it) }
-                objet.vinDomaine?.let { DetailRow("Domaine", it) }
-                objet.vinMillesime?.let { DetailRow("Millésime", it.toString()) }
-                objet.vinType?.let { DetailRow("Type", it) }
-                objet.vinNombreBouteilles?.let { DetailRow("Bouteilles", it.toString()) }
-                Button(onClick = { confirmHaptic(); viewModel.openBottle() }) {
-                    Text("Je débouche une bouteille")
-                }
+                WineCard(
+                    appellation = objet.vinAppellation,
+                    domaine = objet.vinDomaine,
+                    millesime = objet.vinMillesime,
+                    type = objet.vinType,
+                    bouteilles = objet.vinNombreBouteilles,
+                    onOpenBottle = { confirmHaptic(); viewModel.openBottle() },
+                )
             }
         }
     }
@@ -146,6 +182,209 @@ fun ObjetDetailScreen(
             },
             onDismiss = { showDeleteConfirm = false },
         )
+    }
+}
+
+/**
+ * Hero card showcasing where the object lives. Falls back gracefully when
+ * pieces of info are missing: emplacement photo → coloured panel with zone
+ * icon → plain "Sans emplacement" tile. The location text is always overlaid
+ * at the bottom for legibility, with a dark gradient when on top of a photo.
+ */
+@Composable
+private fun LocationHero(
+    zoneNom: String?,
+    zoneIcone: String?,
+    zoneCouleur: String?,
+    emplacementNom: String?,
+    emplacementDescription: String?,
+    emplacementPhotoUrl: String?,
+    onClick: () -> Unit,
+) {
+    val zoneColor = zoneCouleur?.let(::parseColor) ?: MaterialTheme.colorScheme.primary
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Box(modifier = Modifier.height(200.dp)) {
+            if (!emplacementPhotoUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = emplacementPhotoUrl,
+                    contentDescription = "Photo de l'emplacement",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // Dark gradient at the bottom so the location text stays readable
+                // regardless of the photo's content.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f)),
+                                startY = 200f,
+                            ),
+                        ),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(zoneColor),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        ZoneIcons.vectorFor(zoneIcone),
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(80.dp),
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(zoneColor),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            ZoneIcons.vectorFor(zoneIcone),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        zoneNom ?: "Sans zone",
+                        color = if (emplacementPhotoUrl.isNullOrBlank()) Color.White else Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                    )
+                }
+                if (!emplacementNom.isNullOrBlank()) {
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        emplacementNom,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                    )
+                }
+                if (!emplacementDescription.isNullOrBlank()) {
+                    Text(
+                        emplacementDescription,
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoCard(
+    nom: String,
+    categorie: String,
+    sousCategorie: String?,
+    quantite: Int?,
+    unite: String?,
+    etat: String?,
+    notes: String?,
+    ajoutePar: String?,
+    zoneNom: String?,
+    onZoneClick: () -> Unit,
+    onCategoryClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(nom, style = MaterialTheme.typography.headlineSmall)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (!zoneNom.isNullOrBlank()) {
+                    AssistChip(
+                        onClick = onZoneClick,
+                        label = { Text(zoneNom) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Place, contentDescription = null,
+                                modifier = Modifier.size(AssistChipDefaults.IconSize))
+                        },
+                    )
+                }
+                AssistChip(
+                    onClick = onCategoryClick,
+                    label = { Text(categorie) },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Category, contentDescription = null,
+                            modifier = Modifier.size(AssistChipDefaults.IconSize))
+                    },
+                )
+            }
+
+            sousCategorie?.takeIf { it.isNotBlank() }?.let {
+                DetailRow("Sous-catégorie", it)
+            }
+            quantite?.let {
+                DetailRow("Quantité", "$it ${unite.orEmpty()}".trim())
+            }
+            etat?.takeIf { it.isNotBlank() }?.let { DetailRow("État", it) }
+            notes?.takeIf { it.isNotBlank() }?.let { DetailRow("Notes", it) }
+            ajoutePar?.takeIf { it.isNotBlank() }?.let { DetailRow("Ajouté par", it) }
+        }
+    }
+}
+
+@Composable
+private fun WineCard(
+    appellation: String?,
+    domaine: String?,
+    millesime: Int?,
+    type: String?,
+    bouteilles: Int?,
+    onOpenBottle: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("Vin", style = MaterialTheme.typography.titleMedium)
+            appellation?.takeIf { it.isNotBlank() }?.let { DetailRow("Appellation", it) }
+            domaine?.takeIf { it.isNotBlank() }?.let { DetailRow("Domaine", it) }
+            millesime?.let { DetailRow("Millésime", it.toString()) }
+            type?.takeIf { it.isNotBlank() }?.let { DetailRow("Type", it) }
+            bouteilles?.let { DetailRow("Bouteilles restantes", it.toString()) }
+            Spacer(Modifier.size(8.dp))
+            Button(onClick = onOpenBottle, modifier = Modifier.fillMaxWidth()) {
+                Text("Je débouche une bouteille")
+            }
+        }
     }
 }
 

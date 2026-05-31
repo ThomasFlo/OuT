@@ -7,7 +7,9 @@ import androidx.compose.material.icons.filled.Chair
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Deck
 import androidx.compose.material.icons.filled.DoorFront
+import androidx.compose.material.icons.filled.Fireplace
 import androidx.compose.material.icons.filled.Garage
+import androidx.compose.material.icons.filled.Handyman
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Kitchen
@@ -15,6 +17,7 @@ import androidx.compose.material.icons.filled.LocalLaundryService
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.OutdoorGrill
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Pool
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Roofing
 import androidx.compose.material.icons.filled.Shelves
@@ -55,10 +58,13 @@ object ZoneIcons {
         ZoneIcon("roofing", "Grenier", Icons.Filled.Roofing),
         ZoneIcon("cellar", "Cave", Icons.Filled.WineBar),
         ZoneIcon("garage", "Garage", Icons.Filled.Garage),
+        ZoneIcon("workshop", "Atelier", Icons.Filled.Handyman),
         ZoneIcon("warehouse", "Abri / Remise", Icons.Filled.Warehouse),
+        ZoneIcon("firewood", "Abri à bois", Icons.Filled.Fireplace),
         ZoneIcon("box", "Stockage", Icons.Filled.Inventory2),
         ZoneIcon("deck", "Terrasse", Icons.Filled.Deck),
         ZoneIcon("grill", "Barbecue", Icons.Filled.OutdoorGrill),
+        ZoneIcon("pool", "Cabanon piscine", Icons.Filled.Pool),
         ZoneIcon("yard", "Jardin", Icons.Filled.Yard),
     )
 

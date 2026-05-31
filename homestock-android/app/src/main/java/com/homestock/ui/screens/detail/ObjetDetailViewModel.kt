@@ -14,8 +14,13 @@ import javax.inject.Inject
 
 data class ObjetDetailState(
     val objet: ObjetEntity? = null,
+    val zoneId: Long? = null,
     val zoneNom: String? = null,
+    val zoneIcone: String? = null,
+    val zoneCouleur: String? = null,
     val emplacementNom: String? = null,
+    val emplacementPhotoUrl: String? = null,
+    val emplacementDescription: String? = null,
 )
 
 @HiltViewModel
@@ -38,7 +43,16 @@ class ObjetDetailViewModel @Inject constructor(
             val objet = repository.getObjet(localId) ?: return@launch
             val emp = repository.getEmplacement(objet.emplacementId)
             val zone = emp?.let { repository.getZone(it.zoneId) }
-            _state.value = ObjetDetailState(objet, zone?.nom, emp?.nomEmplacement)
+            _state.value = ObjetDetailState(
+                objet = objet,
+                zoneId = zone?.id,
+                zoneNom = zone?.nom,
+                zoneIcone = zone?.icone,
+                zoneCouleur = zone?.couleur,
+                emplacementNom = emp?.nomEmplacement,
+                emplacementPhotoUrl = emp?.photoUrl,
+                emplacementDescription = emp?.description,
+            )
         }
     }
 

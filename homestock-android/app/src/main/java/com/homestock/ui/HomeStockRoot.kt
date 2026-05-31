@@ -144,6 +144,8 @@ private fun MainScaffold(viewModel: MainViewModel) {
                 ObjetDetailScreen(
                     onBack = { navController.popBackStack() },
                     onEdit = { navController.navigate(Routes.editObjet(it)) },
+                    onZone = { navController.navigate(Routes.zoneDetail(it)) },
+                    onCategory = { navController.navigate(Routes.categoryDetail(it)) },
                     connected = connected,
                 )
             }
