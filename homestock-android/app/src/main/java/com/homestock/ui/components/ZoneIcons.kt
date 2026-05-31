@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Pool
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Roofing
-import androidx.compose.material.icons.filled.Shelves
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Stairs
 import androidx.compose.material.icons.filled.Warehouse
 import androidx.compose.material.icons.filled.Weekend
@@ -48,7 +48,7 @@ object ZoneIcons {
         ZoneIcon("chair", "Bureau", Icons.Filled.Chair),
         ZoneIcon("dining", "Salle à manger", Icons.Filled.Restaurant),
         ZoneIcon("kitchen", "Cuisine", Icons.Filled.Kitchen),
-        ZoneIcon("shelves", "Étagères", Icons.Filled.Shelves),
+        ZoneIcon("shelves", "Etageres", Icons.Filled.Storage),
         ZoneIcon("bed", "Chambre", Icons.Filled.Bed),
         ZoneIcon("bathtub", "Salle de bain", Icons.Filled.Bathtub),
         ZoneIcon("wc", "WC", Icons.Filled.Wc),

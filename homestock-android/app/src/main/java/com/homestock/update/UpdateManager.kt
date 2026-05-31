@@ -1,6 +1,6 @@
 package com.homestock.update
 
-import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -35,7 +35,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class UpdateManager @Inject constructor(
-    @ApplicationContext private val context: Application,
+    @ApplicationContext private val context: Context,
     private val api: ApiService,
 ) {
 
