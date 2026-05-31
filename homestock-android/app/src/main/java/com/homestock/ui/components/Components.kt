@@ -240,7 +240,13 @@ fun ConfirmDialog(
 }
 
 @Composable
-fun ZoneCard(nom: String, couleur: String, nbObjets: Int, onClick: () -> Unit) {
+fun ZoneCard(
+    nom: String,
+    couleur: String,
+    nbObjets: Int,
+    onClick: () -> Unit,
+    icone: String? = null,
+) {
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -259,7 +265,15 @@ fun ZoneCard(nom: String, couleur: String, nbObjets: Int, onClick: () -> Unit) {
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(parseColor(couleur)),
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    ZoneIcons.vectorFor(icone),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(nom, style = MaterialTheme.typography.titleMedium)

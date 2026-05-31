@@ -3,7 +3,16 @@ package com.homestock.ui.screens.settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +58,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homestock.data.local.ZoneEntity
 import com.homestock.data.remote.dto.CategoryDto
 import com.homestock.ui.components.ReorderableColumn
+import com.homestock.ui.components.ZONE_COLORS
+import com.homestock.ui.components.ZoneIcons
+import com.homestock.ui.components.parseColor
 import kotlinx.coroutines.launch
 
 @Composable
@@ -299,16 +311,27 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
 
     editingZone?.let { zone ->
         var editedName by remember(zone.id) { mutableStateOf(zone.nom) }
+        var editedIcon by remember(zone.id) { mutableStateOf(zone.icone) }
+        var editedColor by remember(zone.id) { mutableStateOf(zone.couleur) }
         AlertDialog(
             onDismissRequest = { editingZone = null },
             title = { Text("Zone : ${zone.nom}") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                ) {
                     OutlinedTextField(
                         value = editedName,
                         onValueChange = { editedName = it },
                         label = { Text("Nom de la zone") },
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                    ZoneAppearancePicker(
+                        selectedIcon = editedIcon,
+                        selectedColor = editedColor,
+                        onIconSelected = { editedIcon = it },
+                        onColorSelected = { editedColor = it },
                     )
                     Text(
                         "${zone.nbObjets} objet${if (zone.nbObjets > 1) "s" else ""}",
@@ -320,10 +343,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val trimmed = editedName.trim()
-                        if (trimmed.isNotBlank() && trimmed != zone.nom) {
-                            viewModel.renameZone(zone, trimmed)
-                        }
+                        viewModel.updateZoneDetails(zone, editedName, editedIcon, editedColor)
                         editingZone = null
                     },
                 ) { Text("Enregistrer") }
@@ -620,5 +640,89 @@ private fun VersionSection(viewModel: SettingsViewModel = hiltViewModel()) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
+    }
+}
+
+/**
+ * Icon + colour picker for a zone, used inside the edit dialog. A live preview
+ * (the chosen icon on the chosen colour) sits above two wrapping rows of
+ * choices.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ZoneAppearancePicker(
+    selectedIcon: String,
+    selectedColor: String,
+    onIconSelected: (String) -> Unit,
+    onColorSelected: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(parseColor(selectedColor)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    ZoneIcons.vectorFor(selectedIcon),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text("Aperçu", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        Text("Icône", style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            ZoneIcons.CATALOG.forEach { item ->
+                val selected = item.key == selectedIcon
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 2.dp)
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                        .clickable { onIconSelected(item.key) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        item.vector,
+                        contentDescription = item.label,
+                        tint = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+        }
+
+        Text("Couleur", style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ZONE_COLORS.forEach { hex ->
+                val selected = hex.equals(selectedColor, ignoreCase = true)
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 2.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(parseColor(hex))
+                        .then(
+                            if (selected) Modifier.border(
+                                3.dp,
+                                MaterialTheme.colorScheme.onSurface,
+                                CircleShape,
+                            ) else Modifier,
+                        )
+                        .clickable { onColorSelected(hex) },
+                )
+            }
+        }
     }
 }

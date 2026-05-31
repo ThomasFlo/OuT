@@ -54,7 +54,7 @@ fun ZonesScreen(
                 }
             }
             items(zones) { z ->
-                ZoneCard(z.nom, z.couleur, z.nbObjets, onClick = { onZone(z.id) })
+                ZoneCard(z.nom, z.couleur, z.nbObjets, onClick = { onZone(z.id) }, icone = z.icone)
             }
         }
     }

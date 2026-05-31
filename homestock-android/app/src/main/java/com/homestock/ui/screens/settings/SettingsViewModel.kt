@@ -98,6 +98,16 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /** Update a zone's name, icon and colour in one shot (from the edit dialog). */
+    fun updateZoneDetails(zone: ZoneEntity, nom: String, icone: String, couleur: String) {
+        val trimmed = nom.trim().ifBlank { zone.nom }
+        viewModelScope.launch {
+            runCatching {
+                repository.updateZone(zone.copy(nom = trimmed, icone = icone, couleur = couleur))
+            }.onFailure { _message.value = "Échec : ${it.message}" }
+        }
+    }
+
     fun toggleZone(zone: ZoneEntity) {
         viewModelScope.launch {
             runCatching { repository.updateZone(zone.copy(actif = !zone.actif)) }
