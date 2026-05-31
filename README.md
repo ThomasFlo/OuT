@@ -1,4 +1,4 @@
-# HomeStock
+# OùT - HomeStock
 
 Application de localisation d'objets à domicile pour un couple sur deux Pixel,
 avec **recherche sémantique vocale** et **synchronisation temps réel** via un
