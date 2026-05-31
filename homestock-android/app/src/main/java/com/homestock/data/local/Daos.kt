@@ -33,6 +33,9 @@ interface EmplacementDao {
     @Query("SELECT * FROM emplacements WHERE id = :id")
     suspend fun getById(id: Long): EmplacementEntity?
 
+    @Query("SELECT COUNT(*) FROM emplacements WHERE zoneId = :zoneId")
+    suspend fun countByZone(zoneId: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<EmplacementEntity>)
 
@@ -79,6 +82,9 @@ interface ObjetDao {
 
     @Query("SELECT * FROM objets WHERE serverId = :serverId")
     suspend fun getByServerId(serverId: Long): ObjetEntity?
+
+    @Query("SELECT COUNT(*) FROM objets WHERE emplacementId = :emplacementId AND pendingDelete = 0")
+    suspend fun countByEmplacement(emplacementId: Long): Int
 
     @Query("SELECT * FROM objets WHERE pendingSync = 1 OR pendingDelete = 1")
     suspend fun getPending(): List<ObjetEntity>

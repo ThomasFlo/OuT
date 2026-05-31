@@ -17,6 +17,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import EMBEDDING_DIM, Base
 
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nom: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    ordre: Mapped[int] = mapped_column(Integer, default=0)
+    # System categories (e.g. the wine category, which the apps special-case)
+    # cannot be renamed or deleted from the UI.
+    protegee: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class Zone(Base):
     __tablename__ = "zones"
 
@@ -28,7 +39,7 @@ class Zone(Base):
     ordre: Mapped[int] = mapped_column(Integer, default=0)
 
     emplacements: Mapped[list["Emplacement"]] = relationship(
-        back_populates="zone", cascade="all, delete-orphan"
+        back_populates="zone", passive_deletes=True
     )
 
 
@@ -45,7 +56,7 @@ class Emplacement(Base):
 
     zone: Mapped["Zone"] = relationship(back_populates="emplacements")
     objets: Mapped[list["Objet"]] = relationship(
-        back_populates="emplacement", cascade="all, delete-orphan"
+        back_populates="emplacement", passive_deletes=True
     )
 
 

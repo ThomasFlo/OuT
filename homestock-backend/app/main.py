@@ -8,8 +8,17 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 from .database import Base, engine, get_db
-from .init_data import seed_zones
-from .routers import locations, objects, photos, search, wine, zones
+from .init_data import seed_categories, seed_zones
+from .routers import (
+    app_update,
+    categories,
+    locations,
+    objects,
+    photos,
+    search,
+    wine,
+    zones,
+)
 from .services.websocket import manager, set_event_loop
 
 logging.basicConfig(level=logging.INFO)
@@ -25,11 +34,13 @@ app.add_middleware(
 )
 
 app.include_router(zones.router)
+app.include_router(categories.router)
 app.include_router(locations.router)
 app.include_router(objects.router)
 app.include_router(search.router)
 app.include_router(wine.router)
 app.include_router(photos.router)
+app.include_router(app_update.router)
 
 
 @app.on_event("startup")
@@ -63,6 +74,7 @@ async def on_startup() -> None:
     db = SessionLocal()
     try:
         seed_zones(db)
+        seed_categories(db)
     finally:
         db.close()
     # Calibrate the IVFFlat index against current row stats so the first

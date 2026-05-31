@@ -13,8 +13,10 @@ android {
         applicationId = "com.homestock"
         minSdk = 30
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Bump versionCode on every release that ships an APK so the
+        // in-app updater picks it up. versionName is purely cosmetic.
+        versionCode = 2
+        versionName = "1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
@@ -38,6 +40,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // Required so the updater can read BuildConfig.VERSION_CODE / NAME.
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()

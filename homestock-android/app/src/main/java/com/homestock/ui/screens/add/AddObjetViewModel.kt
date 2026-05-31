@@ -223,6 +223,15 @@ class AddObjetViewModel @Inject constructor(
 
     fun photoUrl(relative: String?): String? = repository.absolutePhotoUrl(relative)
 
+    fun delete(onDone: () -> Unit) {
+        val target = editingEntity ?: return
+        viewModelScope.launch {
+            runCatching { repository.deleteObjet(target) }
+                .onSuccess { onDone() }
+                .onFailure { e -> _state.update { it.copy(error = e.message ?: "Erreur") } }
+        }
+    }
+
     fun save(onDone: () -> Unit) {
         val s = _state.value
         if (s.nom.isBlank() || s.zoneId == null ||

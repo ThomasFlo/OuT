@@ -1,5 +1,8 @@
 package com.homestock.data.remote
 
+import com.homestock.data.remote.dto.AppVersionDto
+import com.homestock.data.remote.dto.CategoryDto
+import com.homestock.data.remote.dto.CategoryRequest
 import com.homestock.data.remote.dto.EmplacementDto
 import com.homestock.data.remote.dto.EmplacementRequest
 import com.homestock.data.remote.dto.ObjetDto
@@ -11,6 +14,7 @@ import com.homestock.data.remote.dto.WineStats
 import com.homestock.data.remote.dto.ZoneDto
 import com.homestock.data.remote.dto.ZoneRequest
 import okhttp3.MultipartBody
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -20,6 +24,7 @@ import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 interface ApiService {
     @GET("health")
@@ -38,8 +43,41 @@ interface ApiService {
     @DELETE("zones/{id}")
     suspend fun deleteZone(@Path("id") id: Long)
 
+    @POST("zones/{id}/migrate")
+    suspend fun migrateZone(
+        @Path("id") sourceId: Long,
+        @Query("target_id") targetId: Long,
+        @Query("delete_source") deleteSource: Boolean,
+    )
+
+    @POST("zones/reorder")
+    suspend fun reorderZones(@Body orderedIds: List<Long>)
+
     @GET("zones/categories")
     suspend fun getCategories(): List<String>
+
+    // Categories (editable)
+    @GET("categories")
+    suspend fun getCategoryList(): List<CategoryDto>
+
+    @POST("categories")
+    suspend fun createCategory(@Body body: CategoryRequest): CategoryDto
+
+    @PUT("categories/{id}")
+    suspend fun updateCategory(@Path("id") id: Long, @Body body: CategoryRequest): CategoryDto
+
+    @DELETE("categories/{id}")
+    suspend fun deleteCategory(@Path("id") id: Long)
+
+    @POST("categories/{id}/migrate")
+    suspend fun migrateCategory(
+        @Path("id") sourceId: Long,
+        @Query("target_id") targetId: Long,
+        @Query("delete_source") deleteSource: Boolean,
+    )
+
+    @POST("categories/reorder")
+    suspend fun reorderCategories(@Body orderedIds: List<Long>)
 
     // Emplacements
     @GET("emplacements")
@@ -53,6 +91,13 @@ interface ApiService {
 
     @DELETE("emplacements/{id}")
     suspend fun deleteEmplacement(@Path("id") id: Long)
+
+    @POST("emplacements/{id}/migrate")
+    suspend fun migrateEmplacement(
+        @Path("id") sourceId: Long,
+        @Query("target_id") targetId: Long,
+        @Query("delete_source") deleteSource: Boolean,
+    )
 
     // Objets
     @GET("objets")
@@ -85,6 +130,14 @@ interface ApiService {
     @Multipart
     @POST("photos")
     suspend fun uploadPhoto(@Part file: MultipartBody.Part): PhotoUploadResponse
+
+    // App self-update
+    @GET("app/version")
+    suspend fun appVersion(): AppVersionDto
+
+    @Streaming
+    @GET("app/download")
+    suspend fun downloadApk(): ResponseBody
 
     // Backup
     @GET("export")

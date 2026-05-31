@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.homestock.ui.components.CameraCapture
+import com.homestock.ui.components.ConfirmDialog
 import com.homestock.ui.components.rememberConfirmHaptic
 import com.homestock.domain.model.Categories
 
@@ -54,6 +56,7 @@ fun AddObjetScreen(
     var cameraTarget by remember { mutableStateOf(CameraTarget.NONE) }
     val cameraPermission = rememberPermissionState(android.Manifest.permission.CAMERA)
     val confirmHaptic = rememberConfirmHaptic()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(cameraTarget) {
         if (cameraTarget != CameraTarget.NONE && !cameraPermission.status.isGranted) {
@@ -83,6 +86,17 @@ fun AddObjetScreen(
                 navigationIcon = {
                     IconButton(onClick = { if (state.step == 0) onDone() else viewModel.prevStep() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                },
+                actions = {
+                    if (state.isEditing) {
+                        IconButton(onClick = { showDeleteConfirm = true }) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Supprimer",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 },
             )
@@ -140,5 +154,20 @@ fun AddObjetScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (showDeleteConfirm) {
+        ConfirmDialog(
+            title = "Supprimer « ${state.nom.ifBlank { "cet objet" }} » ?",
+            message = "Cette action est définitive.",
+            confirmLabel = "Supprimer",
+            destructive = true,
+            onConfirm = {
+                confirmHaptic()
+                showDeleteConfirm = false
+                viewModel.delete(onDone)
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
     }
 }

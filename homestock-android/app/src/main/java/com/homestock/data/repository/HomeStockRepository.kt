@@ -9,6 +9,8 @@ import com.homestock.data.local.ZoneEntity
 import com.homestock.data.remote.ApiService
 import com.homestock.data.remote.HostSelectionInterceptor
 import com.homestock.data.remote.RealtimeClient
+import com.homestock.data.remote.dto.CategoryDto
+import com.homestock.data.remote.dto.CategoryRequest
 import com.homestock.data.remote.dto.EmplacementRequest
 import com.homestock.data.remote.dto.SearchRequest
 import com.homestock.data.remote.dto.WineStats
@@ -42,6 +44,12 @@ class HomeStockRepository @Inject constructor(
 
     private val _categories = MutableStateFlow(Categories.ALL)
     val categories: StateFlow<List<String>> = _categories.asStateFlow()
+
+    // Richer category list (id + protected flag + object count) for the
+    // management screen. Categories are not cached in Room, so this is an
+    // in-memory snapshot refreshed from the server.
+    private val _categoriesDetailed = MutableStateFlow<List<CategoryDto>>(emptyList())
+    val categoriesDetailed: StateFlow<List<CategoryDto>> = _categoriesDetailed.asStateFlow()
 
     init {
         // Any server-side change triggers a local refresh.
@@ -97,7 +105,48 @@ class HomeStockRepository @Inject constructor(
         }
         if (objets.isNotEmpty()) objetDao.deleteMissing(objets.map { it.id })
 
-        runCatching { _categories.value = api.getCategories() }
+        runCatching {
+            val cats = api.getCategoryList()
+            _categoriesDetailed.value = cats
+            _categories.value = cats.map { it.nom }
+        }.onFailure {
+            // Fall back to the legacy flat endpoint if the new one is missing.
+            runCatching { _categories.value = api.getCategories() }
+        }
+    }
+
+    /** Pull just the detailed category list (used by the management screen). */
+    suspend fun refreshCategories() {
+        runCatching {
+            val cats = api.getCategoryList()
+            _categoriesDetailed.value = cats
+            _categories.value = cats.map { it.nom }
+        }
+    }
+
+    suspend fun createCategory(nom: String) {
+        api.createCategory(CategoryRequest(nom))
+        refreshCategories()
+    }
+
+    suspend fun renameCategory(id: Long, nom: String) {
+        api.updateCategory(id, CategoryRequest(nom))
+        refreshAll()
+    }
+
+    suspend fun deleteCategory(id: Long) {
+        api.deleteCategory(id)
+        refreshCategories()
+    }
+
+    suspend fun migrateCategory(sourceId: Long, targetId: Long, deleteSource: Boolean) {
+        api.migrateCategory(sourceId, targetId, deleteSource)
+        refreshAll()
+    }
+
+    suspend fun reorderCategories(orderedIds: List<Long>) {
+        api.reorderCategories(orderedIds)
+        refreshCategories()
     }
 
     /** Push locally-queued changes made while offline (last-write-wins server side). */
@@ -170,6 +219,51 @@ class HomeStockRepository @Inject constructor(
         api.deleteZone(id)
         refreshAll()
     }
+
+    /**
+     * Reassigns every emplacement of [sourceId] to [targetId], optionally
+     * deleting the source zone once empty. Used by the UI when a non-empty
+     * zone needs to be removed.
+     */
+    suspend fun migrateZone(sourceId: Long, targetId: Long, deleteSource: Boolean) {
+        api.migrateZone(sourceId, targetId, deleteSource)
+        refreshAll()
+    }
+
+    suspend fun reorderZones(orderedIds: List<Long>) {
+        api.reorderZones(orderedIds)
+        refreshAll()
+    }
+
+    /** Local count of emplacements belonging to a zone (for UI decisions). */
+    suspend fun countEmplacements(zoneId: Long): Int = emplacementDao.countByZone(zoneId)
+
+    suspend fun deleteEmplacement(id: Long) {
+        api.deleteEmplacement(id)
+        refreshAll()
+    }
+
+    suspend fun migrateEmplacement(sourceId: Long, targetId: Long, deleteSource: Boolean) {
+        api.migrateEmplacement(sourceId, targetId, deleteSource)
+        refreshAll()
+    }
+
+    suspend fun updateEmplacement(emp: EmplacementEntity) {
+        api.updateEmplacement(
+            emp.id,
+            EmplacementRequest(
+                zoneId = emp.zoneId,
+                nomEmplacement = emp.nomEmplacement,
+                description = emp.description,
+                photoUrl = emp.photoUrl,
+            ),
+        )
+        refreshAll()
+    }
+
+    /** Local count of objets in an emplacement (used to decide which dialog to show). */
+    suspend fun countObjetsForEmplacement(emplacementId: Long): Int =
+        objetDao.countByEmplacement(emplacementId)
 
     suspend fun createEmplacement(zoneId: Long, nom: String, description: String?, photoUrl: String?): EmplacementEntity {
         val dto = api.createEmplacement(

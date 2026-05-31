@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Exposes <cacheDir>/updates/ so the FileProvider can hand the
+         downloaded APK to the system PackageInstaller. -->
+    <cache-path
+        name="updates"
+        path="updates/" />
+</paths>

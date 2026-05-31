@@ -25,6 +25,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.homestock.domain.model.Categories
+import com.homestock.ui.components.ConfirmDialog
 import com.homestock.ui.components.ConnectionDot
 import com.homestock.ui.components.rememberConfirmHaptic
 
@@ -48,6 +52,7 @@ fun ObjetDetailScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val objet = state.objet
     val confirmHaptic = rememberConfirmHaptic()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -65,7 +70,7 @@ fun ObjetDetailScreen(
                             Icon(Icons.Filled.Edit, contentDescription = "Modifier")
                         }
                     }
-                    IconButton(onClick = { confirmHaptic(); viewModel.delete(onBack) }) {
+                    IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(Icons.Filled.Delete, contentDescription = "Supprimer")
                     }
                 },
@@ -126,6 +131,21 @@ fun ObjetDetailScreen(
                 }
             }
         }
+    }
+
+    if (showDeleteConfirm && objet != null) {
+        ConfirmDialog(
+            title = "Supprimer « ${objet.nom} » ?",
+            message = "Cette action est définitive.",
+            confirmLabel = "Supprimer",
+            destructive = true,
+            onConfirm = {
+                confirmHaptic()
+                showDeleteConfirm = false
+                viewModel.delete(onBack)
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
     }
 }
 
