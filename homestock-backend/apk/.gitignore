@@ -1,0 +1,7 @@
+# Never commit binary APKs to git.
+*.apk
+# Keep version.json out of source control too — it's part of a release artifact.
+version.json
+# But keep this directory itself so it exists in the repo.
+!.gitignore
+!README.md

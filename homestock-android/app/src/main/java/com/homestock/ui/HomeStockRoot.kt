@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.homestock.ui.navigation.BottomTab
 import com.homestock.ui.navigation.Routes
+import com.homestock.update.UpdateGate
 import com.homestock.ui.screens.add.AddObjetScreen
 import com.homestock.ui.screens.categories.CategoriesScreen
 import com.homestock.ui.screens.categories.CategoryDetailScreen
@@ -42,6 +43,9 @@ fun HomeStockRoot(viewModel: MainViewModel = hiltViewModel()) {
         return
     }
     MainScaffold(viewModel)
+    // Self-update prompt: silent if up to date, dialog otherwise. Placed
+    // OUTSIDE the scaffold so the dialog overlays whatever route is active.
+    UpdateGate()
 }
 
 @Composable

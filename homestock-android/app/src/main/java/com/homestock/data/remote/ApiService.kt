@@ -1,5 +1,6 @@
 package com.homestock.data.remote
 
+import com.homestock.data.remote.dto.AppVersionDto
 import com.homestock.data.remote.dto.EmplacementDto
 import com.homestock.data.remote.dto.EmplacementRequest
 import com.homestock.data.remote.dto.ObjetDto
@@ -11,6 +12,7 @@ import com.homestock.data.remote.dto.WineStats
 import com.homestock.data.remote.dto.ZoneDto
 import com.homestock.data.remote.dto.ZoneRequest
 import okhttp3.MultipartBody
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -20,6 +22,7 @@ import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 interface ApiService {
     @GET("health")
@@ -99,6 +102,14 @@ interface ApiService {
     @Multipart
     @POST("photos")
     suspend fun uploadPhoto(@Part file: MultipartBody.Part): PhotoUploadResponse
+
+    // App self-update
+    @GET("app/version")
+    suspend fun appVersion(): AppVersionDto
+
+    @Streaming
+    @GET("app/download")
+    suspend fun downloadApk(): ResponseBody
 
     // Backup
     @GET("export")

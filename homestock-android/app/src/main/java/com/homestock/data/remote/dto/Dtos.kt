@@ -2,6 +2,16 @@ package com.homestock.data.remote.dto
 
 import com.google.gson.annotations.SerializedName
 
+/** Server-side metadata about the latest published Android APK. */
+data class AppVersionDto(
+    @SerializedName("version_code") val versionCode: Int = 0,
+    @SerializedName("version_name") val versionName: String = "0.0",
+    val sha256: String? = null,
+    @SerializedName("size_bytes") val sizeBytes: Long? = null,
+    val notes: String? = null,
+    val available: Boolean = false,
+)
+
 data class ZoneDto(
     val id: Long,
     val nom: String,
