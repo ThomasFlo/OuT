@@ -194,6 +194,23 @@ class HomeStockRepository @Inject constructor(
         refreshAll()
     }
 
+    suspend fun updateEmplacement(emp: EmplacementEntity) {
+        api.updateEmplacement(
+            emp.id,
+            EmplacementRequest(
+                zoneId = emp.zoneId,
+                nomEmplacement = emp.nomEmplacement,
+                description = emp.description,
+                photoUrl = emp.photoUrl,
+            ),
+        )
+        refreshAll()
+    }
+
+    /** Local count of objets in an emplacement (used to decide which dialog to show). */
+    suspend fun countObjetsForEmplacement(emplacementId: Long): Int =
+        objetDao.countByEmplacement(emplacementId)
+
     suspend fun createEmplacement(zoneId: Long, nom: String, description: String?, photoUrl: String?): EmplacementEntity {
         val dto = api.createEmplacement(
             EmplacementRequest(zoneId = zoneId, nomEmplacement = nom, description = description, photoUrl = photoUrl),

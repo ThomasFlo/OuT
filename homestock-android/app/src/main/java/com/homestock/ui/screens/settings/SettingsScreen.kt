@@ -15,10 +15,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -165,19 +170,34 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 onClick = { if (newZone.isNotBlank()) { viewModel.addZone(newZone); newZone = "" } },
             ) { Text("Ajouter") }
         }
+        Text(
+            "Touchez une zone pour la renommer ou la supprimer.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         zones.forEach { zone ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { editingZone = zone }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     zone.nom,
-                    Modifier
-                        .weight(1f)
-                        .clickable { editingZone = zone }
-                        .padding(vertical = 8.dp),
+                    Modifier.weight(1f),
                     color = if (zone.actif) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text("${zone.nbObjets}")
                 Spacer(Modifier.width(8.dp))
+                IconButton(onClick = { editingZone = zone }) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "Modifier",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Switch(checked = zone.actif, onCheckedChange = { viewModel.toggleZone(zone) })
             }
         }
@@ -192,6 +212,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 Text("Importer (JSON)")
             }
         }
+
+        HorizontalDivider()
+        VersionSection()
         Spacer(Modifier.height(24.dp))
     }
 
@@ -347,4 +370,47 @@ private fun DeleteZoneDialog(
             if (empCount != null) TextButton(onClick = onDismiss) { Text("Annuler") }
         },
     )
+}
+
+/**
+ * Shows the running app version and what the NAS believes the latest
+ * published version is. Lets the user see at a glance whether they are up
+ * to date without waiting for the start-up update prompt to fire again.
+ */
+@Composable
+private fun VersionSection(viewModel: SettingsViewModel = hiltViewModel()) {
+    val server by viewModel.serverVersion.collectAsStateWithLifecycle()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Version", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        IconButton(onClick = viewModel::refreshServerVersion) {
+            Icon(Icons.Filled.Refresh, contentDescription = "Rafraîchir")
+        }
+    }
+    Text(
+        "Application : ${viewModel.appVersionName} (build ${viewModel.appVersionCode})",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    val s = server
+    when {
+        s == null -> Text(
+            "Serveur NAS : indisponible ou aucune APK publiée.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        s.versionCode > viewModel.appVersionCode -> Text(
+            "Serveur NAS : ${s.versionName} (build ${s.versionCode}) — mise à jour disponible.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        s.versionCode < viewModel.appVersionCode -> Text(
+            "Serveur NAS : ${s.versionName} (build ${s.versionCode}) — votre app est plus récente que celle publiée.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        else -> Text(
+            "Serveur NAS : ${s.versionName} (build ${s.versionCode}) — à jour.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary,
+        )
+    }
 }

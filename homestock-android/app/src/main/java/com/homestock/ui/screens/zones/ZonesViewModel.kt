@@ -11,6 +11,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -43,9 +44,55 @@ class ZoneDetailViewModel @Inject constructor(
     private val _zoneNom = MutableStateFlow("Zone")
     val zoneNom: StateFlow<String> = _zoneNom
 
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
     init {
         viewModelScope.launch { repository.getZone(zoneId)?.let { _zoneNom.value = it.nom } }
     }
 
     fun photoUrl(relative: String?): String? = repository.absolutePhotoUrl(relative)
+
+    fun clearMessage() { _message.value = null }
+
+    // ----- Emplacement management -----
+
+    fun addEmplacement(nom: String) {
+        if (nom.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                repository.createEmplacement(zoneId, nom.trim(), description = null, photoUrl = null)
+            }.onSuccess { _message.value = "Emplacement créé" }
+                .onFailure { _message.value = "Échec : ${it.message}" }
+        }
+    }
+
+    fun renameEmplacement(emp: EmplacementEntity, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank() || trimmed == emp.nomEmplacement) return
+        viewModelScope.launch {
+            runCatching { repository.updateEmplacement(emp.copy(nomEmplacement = trimmed)) }
+                .onFailure { _message.value = "Échec : ${it.message}" }
+        }
+    }
+
+    fun deleteEmplacement(emp: EmplacementEntity) {
+        viewModelScope.launch {
+            runCatching { repository.deleteEmplacement(emp.id) }
+                .onSuccess { _message.value = "Emplacement supprimé" }
+                .onFailure { _message.value = "Suppression refusée : ${it.message}" }
+        }
+    }
+
+    fun migrateAndDeleteEmplacement(source: EmplacementEntity, targetEmpId: Long) {
+        viewModelScope.launch {
+            runCatching {
+                repository.migrateEmplacement(source.id, targetEmpId, deleteSource = true)
+            }.onSuccess { _message.value = "Emplacement supprimé, contenu transféré" }
+                .onFailure { _message.value = "Migration échouée : ${it.message}" }
+        }
+    }
+
+    /** Local count of objets attached to [empId], for dialog wording. */
+    suspend fun objetsCount(empId: Long): Int = repository.countObjetsForEmplacement(empId)
 }

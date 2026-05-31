@@ -83,6 +83,9 @@ interface ObjetDao {
     @Query("SELECT * FROM objets WHERE serverId = :serverId")
     suspend fun getByServerId(serverId: Long): ObjetEntity?
 
+    @Query("SELECT COUNT(*) FROM objets WHERE emplacementId = :emplacementId AND pendingDelete = 0")
+    suspend fun countByEmplacement(emplacementId: Long): Int
+
     @Query("SELECT * FROM objets WHERE pendingSync = 1 OR pendingDelete = 1")
     suspend fun getPending(): List<ObjetEntity>
 

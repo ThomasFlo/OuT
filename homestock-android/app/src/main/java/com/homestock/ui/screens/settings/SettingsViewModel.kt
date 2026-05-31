@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.homestock.data.local.ZoneEntity
+import com.homestock.data.remote.dto.AppVersionDto
 import com.homestock.data.repository.AppSettings
 import com.homestock.data.repository.HomeStockRepository
 import com.homestock.data.repository.SettingsRepository
+import com.homestock.update.UpdateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,7 +23,22 @@ class SettingsViewModel @Inject constructor(
     private val repository: HomeStockRepository,
     private val settingsRepository: SettingsRepository,
     private val gson: Gson,
+    private val updateManager: UpdateManager,
 ) : ViewModel() {
+
+    val appVersionName: String = updateManager.currentVersionName
+    val appVersionCode: Int = updateManager.currentVersionCode
+
+    private val _serverVersion = MutableStateFlow<AppVersionDto?>(null)
+    val serverVersion: StateFlow<AppVersionDto?> = _serverVersion.asStateFlow()
+
+    init {
+        refreshServerVersion()
+    }
+
+    fun refreshServerVersion() {
+        viewModelScope.launch { _serverVersion.value = updateManager.fetchServerVersion() }
+    }
 
     val settings: StateFlow<AppSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)

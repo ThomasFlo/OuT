@@ -44,15 +44,22 @@ class UpdateManager @Inject constructor(
     val currentVersionCode: Int get() = BuildConfig.VERSION_CODE
     val currentVersionName: String get() = BuildConfig.VERSION_NAME
 
-    /** Returns metadata for a newer release, or ``null`` if we're up to date. */
-    suspend fun checkForUpdate(): AppVersionDto? {
+    /**
+     * Returns the server's published version regardless of whether it is
+     * newer than ours. ``null`` when the server is unreachable or no APK
+     * has been published yet. Used for the "Version" panel in Settings.
+     */
+    suspend fun fetchServerVersion(): AppVersionDto? {
         val info = runCatching { api.appVersion() }.getOrElse { e ->
             Log.d(tag, "Update check failed: ${e.message}")
             return null
         }
-        if (!info.available) return null
-        return info.takeIf { it.versionCode > currentVersionCode }
+        return info.takeIf { it.available }
     }
+
+    /** Returns metadata for a newer release, or ``null`` if we're up to date. */
+    suspend fun checkForUpdate(): AppVersionDto? =
+        fetchServerVersion()?.takeIf { it.versionCode > currentVersionCode }
 
     /**
      * Streams the APK into the app cache and verifies the SHA-256.
