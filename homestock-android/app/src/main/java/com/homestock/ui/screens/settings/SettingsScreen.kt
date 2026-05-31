@@ -22,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homestock.data.local.ZoneEntity
-import com.homestock.ui.components.ConfirmDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -244,22 +244,107 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     }
 
     confirmDeleteZone?.let { zone ->
-        ConfirmDialog(
-            title = "Supprimer « ${zone.nom} » ?",
-            message = if (zone.nbObjets > 0) {
-                "⚠️ Cette zone contient ${zone.nbObjets} objet${if (zone.nbObjets > 1) "s" else ""}. " +
-                    "Tous les emplacements et objets associés seront DÉFINITIVEMENT supprimés en cascade. " +
-                    "Cette action est irréversible."
-            } else {
-                "Cette action est définitive."
-            },
-            confirmLabel = "Supprimer",
-            destructive = true,
-            onConfirm = {
+        DeleteZoneDialog(
+            zone = zone,
+            otherZones = zones.filter { it.id != zone.id },
+            loadEmpCount = { viewModel.emplacementsCount(zone.id) },
+            onDeleteEmpty = {
                 viewModel.deleteZone(zone)
+                confirmDeleteZone = null
+            },
+            onMigrateAndDelete = { targetId ->
+                viewModel.migrateAndDeleteZone(zone, targetId)
                 confirmDeleteZone = null
             },
             onDismiss = { confirmDeleteZone = null },
         )
     }
+}
+
+/**
+ * Confirmation dialog for deleting a zone.
+ *
+ * When the source zone is empty, it acts as a regular destructive confirmation.
+ * When the source zone contains emplacements, the user MUST pick a target zone
+ * onto which the emplacements are migrated before the source is deleted —
+ * the server refuses a destructive delete on a non-empty zone, so this UI is
+ * the only safe path.
+ */
+@Composable
+private fun DeleteZoneDialog(
+    zone: ZoneEntity,
+    otherZones: List<ZoneEntity>,
+    loadEmpCount: suspend () -> Int,
+    onDeleteEmpty: () -> Unit,
+    onMigrateAndDelete: (targetId: Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var empCount by remember(zone.id) { mutableStateOf<Int?>(null) }
+    var targetId by remember(zone.id) { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(zone.id) {
+        empCount = runCatching { loadEmpCount() }.getOrDefault(0)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Supprimer « ${zone.nom} » ?") },
+        text = {
+            val count = empCount
+            when {
+                count == null -> Text("Analyse du contenu…")
+                count == 0 -> Text("Cette zone est vide. La suppression est définitive.")
+                otherZones.isEmpty() -> Text(
+                    "Cette zone contient $count emplacement${if (count > 1) "s" else ""}, " +
+                        "mais aucune autre zone n'existe pour les accueillir. " +
+                        "Créez d'abord une nouvelle zone.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+                else -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Cette zone contient $count emplacement${if (count > 1) "s" else ""} " +
+                            "et ${zone.nbObjets} objet${if (zone.nbObjets > 1) "s" else ""}. " +
+                            "Choisissez la zone qui les accueillera :",
+                    )
+                    otherZones.forEach { candidate ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { targetId = candidate.id },
+                        ) {
+                            RadioButton(
+                                selected = targetId == candidate.id,
+                                onClick = { targetId = candidate.id },
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(candidate.nom)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            val count = empCount
+            when {
+                count == null -> TextButton(onClick = onDismiss) { Text("Annuler") }
+                count == 0 -> TextButton(
+                    onClick = onDeleteEmpty,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Supprimer") }
+                else -> TextButton(
+                    enabled = targetId != null,
+                    onClick = { targetId?.let(onMigrateAndDelete) },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Déplacer et supprimer") }
+            }
+        },
+        dismissButton = {
+            if (empCount != null) TextButton(onClick = onDismiss) { Text("Annuler") }
+        },
+    )
 }

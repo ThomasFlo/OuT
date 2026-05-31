@@ -33,6 +33,9 @@ interface EmplacementDao {
     @Query("SELECT * FROM emplacements WHERE id = :id")
     suspend fun getById(id: Long): EmplacementEntity?
 
+    @Query("SELECT COUNT(*) FROM emplacements WHERE zoneId = :zoneId")
+    suspend fun countByZone(zoneId: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<EmplacementEntity>)
 

@@ -91,6 +91,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /** Count of emplacements still attached to [zoneId] in the local cache. */
+    suspend fun emplacementsCount(zoneId: Long): Int = repository.countEmplacements(zoneId)
+
+    /**
+     * Moves the source zone's emplacements onto [targetZoneId] then deletes
+     * the source in one server-side transaction.
+     */
+    fun migrateAndDeleteZone(source: ZoneEntity, targetZoneId: Long) {
+        viewModelScope.launch {
+            runCatching { repository.migrateZone(source.id, targetZoneId, deleteSource = true) }
+                .onSuccess { _message.value = "Zone supprimée, contenu transféré" }
+                .onFailure { _message.value = "Migration échouée : ${it.message}" }
+        }
+    }
+
     suspend fun exportJson(): String = gson.toJson(repository.export())
 
     fun importJson(json: String) {

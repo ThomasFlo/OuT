@@ -29,6 +29,7 @@ class ZoneOut(ZoneBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     nb_objets: int = 0
+    nb_emplacements: int = 0
 
 
 # ----- Emplacements -----
@@ -53,6 +54,7 @@ class EmplacementUpdate(BaseModel):
 class EmplacementOut(EmplacementBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    nb_objets: int = 0
 
 
 # ----- Vin -----

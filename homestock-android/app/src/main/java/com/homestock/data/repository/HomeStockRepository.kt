@@ -171,6 +171,29 @@ class HomeStockRepository @Inject constructor(
         refreshAll()
     }
 
+    /**
+     * Reassigns every emplacement of [sourceId] to [targetId], optionally
+     * deleting the source zone once empty. Used by the UI when a non-empty
+     * zone needs to be removed.
+     */
+    suspend fun migrateZone(sourceId: Long, targetId: Long, deleteSource: Boolean) {
+        api.migrateZone(sourceId, targetId, deleteSource)
+        refreshAll()
+    }
+
+    /** Local count of emplacements belonging to a zone (for UI decisions). */
+    suspend fun countEmplacements(zoneId: Long): Int = emplacementDao.countByZone(zoneId)
+
+    suspend fun deleteEmplacement(id: Long) {
+        api.deleteEmplacement(id)
+        refreshAll()
+    }
+
+    suspend fun migrateEmplacement(sourceId: Long, targetId: Long, deleteSource: Boolean) {
+        api.migrateEmplacement(sourceId, targetId, deleteSource)
+        refreshAll()
+    }
+
     suspend fun createEmplacement(zoneId: Long, nom: String, description: String?, photoUrl: String?): EmplacementEntity {
         val dto = api.createEmplacement(
             EmplacementRequest(zoneId = zoneId, nomEmplacement = nom, description = description, photoUrl = photoUrl),

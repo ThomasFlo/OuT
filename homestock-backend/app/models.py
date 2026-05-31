@@ -28,7 +28,7 @@ class Zone(Base):
     ordre: Mapped[int] = mapped_column(Integer, default=0)
 
     emplacements: Mapped[list["Emplacement"]] = relationship(
-        back_populates="zone", cascade="all, delete-orphan"
+        back_populates="zone", passive_deletes=True
     )
 
 
@@ -45,7 +45,7 @@ class Emplacement(Base):
 
     zone: Mapped["Zone"] = relationship(back_populates="emplacements")
     objets: Mapped[list["Objet"]] = relationship(
-        back_populates="emplacement", cascade="all, delete-orphan"
+        back_populates="emplacement", passive_deletes=True
     )
 
 

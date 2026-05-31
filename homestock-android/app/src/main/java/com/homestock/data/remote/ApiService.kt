@@ -38,6 +38,13 @@ interface ApiService {
     @DELETE("zones/{id}")
     suspend fun deleteZone(@Path("id") id: Long)
 
+    @POST("zones/{id}/migrate")
+    suspend fun migrateZone(
+        @Path("id") sourceId: Long,
+        @Query("target_id") targetId: Long,
+        @Query("delete_source") deleteSource: Boolean,
+    )
+
     @GET("zones/categories")
     suspend fun getCategories(): List<String>
 
@@ -53,6 +60,13 @@ interface ApiService {
 
     @DELETE("emplacements/{id}")
     suspend fun deleteEmplacement(@Path("id") id: Long)
+
+    @POST("emplacements/{id}/migrate")
+    suspend fun migrateEmplacement(
+        @Path("id") sourceId: Long,
+        @Query("target_id") targetId: Long,
+        @Query("delete_source") deleteSource: Boolean,
+    )
 
     // Objets
     @GET("objets")
