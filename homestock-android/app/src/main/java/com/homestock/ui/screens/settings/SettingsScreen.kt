@@ -11,16 +11,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.homestock.data.local.ZoneEntity
+import com.homestock.ui.components.ConfirmDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -50,6 +56,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var host by remember(current.nasHost) { mutableStateOf(current.nasHost) }
     var port by remember(current.nasPort) { mutableStateOf(current.nasPort.toString()) }
     var newZone by remember { mutableStateOf("") }
+    var editingZone by remember { mutableStateOf<ZoneEntity?>(null) }
+    var confirmDeleteZone by remember { mutableStateOf<ZoneEntity?>(null) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -161,7 +169,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     zone.nom,
-                    Modifier.weight(1f),
+                    Modifier
+                        .weight(1f)
+                        .clickable { editingZone = zone }
+                        .padding(vertical = 8.dp),
                     color = if (zone.actif) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -182,5 +193,73 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    editingZone?.let { zone ->
+        var editedName by remember(zone.id) { mutableStateOf(zone.nom) }
+        AlertDialog(
+            onDismissRequest = { editingZone = null },
+            title = { Text("Zone : ${zone.nom}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = editedName,
+                        onValueChange = { editedName = it },
+                        label = { Text("Nom de la zone") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "${zone.nbObjets} objet${if (zone.nbObjets > 1) "s" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = editedName.trim()
+                        if (trimmed.isNotBlank() && trimmed != zone.nom) {
+                            viewModel.renameZone(zone, trimmed)
+                        }
+                        editingZone = null
+                    },
+                ) { Text("Enregistrer") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            confirmDeleteZone = zone
+                            editingZone = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("Supprimer") }
+                    TextButton(onClick = { editingZone = null }) { Text("Annuler") }
+                }
+            },
+        )
+    }
+
+    confirmDeleteZone?.let { zone ->
+        ConfirmDialog(
+            title = "Supprimer « ${zone.nom} » ?",
+            message = if (zone.nbObjets > 0) {
+                "⚠️ Cette zone contient ${zone.nbObjets} objet${if (zone.nbObjets > 1) "s" else ""}. " +
+                    "Tous les emplacements et objets associés seront DÉFINITIVEMENT supprimés en cascade. " +
+                    "Cette action est irréversible."
+            } else {
+                "Cette action est définitive."
+            },
+            confirmLabel = "Supprimer",
+            destructive = true,
+            onConfirm = {
+                viewModel.deleteZone(zone)
+                confirmDeleteZone = null
+            },
+            onDismiss = { confirmDeleteZone = null },
+        )
     }
 }

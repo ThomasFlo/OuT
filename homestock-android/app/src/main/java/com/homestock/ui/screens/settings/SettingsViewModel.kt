@@ -72,12 +72,22 @@ class SettingsViewModel @Inject constructor(
     fun renameZone(zone: ZoneEntity, newNom: String) {
         viewModelScope.launch {
             runCatching { repository.updateZone(zone.copy(nom = newNom)) }
+                .onFailure { _message.value = "Échec : ${it.message}" }
         }
     }
 
     fun toggleZone(zone: ZoneEntity) {
         viewModelScope.launch {
             runCatching { repository.updateZone(zone.copy(actif = !zone.actif)) }
+                .onFailure { _message.value = "Échec : ${it.message}" }
+        }
+    }
+
+    fun deleteZone(zone: ZoneEntity) {
+        viewModelScope.launch {
+            runCatching { repository.deleteZone(zone.id) }
+                .onSuccess { _message.value = "Zone supprimée" }
+                .onFailure { _message.value = "Suppression refusée : ${it.message}" }
         }
     }
 
