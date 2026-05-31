@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
@@ -66,7 +67,10 @@ fun SearchScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("HomeStock", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    stringResource(com.homestock.R.string.app_name),
+                    style = MaterialTheme.typography.headlineMedium,
+                )
                 Spacer(Modifier.weight(1f))
                 ConnectionDot(connected)
             }

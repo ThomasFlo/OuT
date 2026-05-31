@@ -1,10 +1,15 @@
-"""Hybrid search: pgvector cosine similarity fused with French full-text search.
+"""Hybrid search: three rankers fused via Reciprocal Rank Fusion (RRF).
 
-Results from both rankers are merged with Reciprocal Rank Fusion (RRF), which
-is robust to the different score scales of the two methods.
+- Semantic (pgvector cosine on multilingual embeddings) — handles paraphrases.
+- Full-text French with prefix matching (``to_tsquery`` + ``:*``) — handles
+  morphology and short prefixes like "mando" → "mandalorian".
+- Fuzzy trigram + ILIKE prefix (``pg_trgm``) — handles typos like
+  "mandolorian" → "mandalorian" and very short prefixes that the FTS misses.
 """
+import re
+
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
@@ -14,6 +19,7 @@ from ..services.embedding import embed_one
 router = APIRouter(prefix="/search", tags=["search"])
 
 RRF_K = 60  # standard RRF damping constant
+FUZZY_THRESHOLD = 0.2  # pg_trgm similarity threshold
 
 
 def _semantic_ranking(db: Session, query: str, limit: int, threshold: float):
@@ -45,14 +51,68 @@ _FTS_DOC = (
 )
 
 
+def _prefix_tsquery(query: str) -> str:
+    """Turn a free-text query into a ``to_tsquery`` string with prefix wildcards.
+
+    "mug mando" -> "mug:* & mando:*". Punctuation and tsquery operators are
+    stripped so user input can't break the query.
+    """
+    words = re.findall(r"[\wÀ-ÿ]+", query, flags=re.UNICODE)
+    return " & ".join(f"{w}:*" for w in words if w)
+
+
 def _fulltext_ranking(db: Session, query: str, limit: int):
-    """French ts_vector ranking over nom + sous_categorie + notes + categorie."""
+    """French ts_vector ranking with prefix matching on every term."""
+    tsq = _prefix_tsquery(query)
+    if not tsq:
+        return []
     sql = text(
-        f"SELECT id, ts_rank({_FTS_DOC}, plainto_tsquery('french', :q)) AS rank "
-        f"FROM objets WHERE {_FTS_DOC} @@ plainto_tsquery('french', :q) "
+        f"SELECT id, ts_rank({_FTS_DOC}, to_tsquery('french', :q)) AS rank "
+        f"FROM objets WHERE {_FTS_DOC} @@ to_tsquery('french', :q) "
         "ORDER BY rank DESC LIMIT :lim"
     )
-    rows = db.execute(sql, {"q": query, "lim": limit * 3}).all()
+    try:
+        rows = db.execute(sql, {"q": tsq, "lim": limit * 3}).all()
+    except Exception:
+        # If the constructed tsquery is somehow invalid, fall back to plain.
+        sql = text(
+            f"SELECT id, ts_rank({_FTS_DOC}, plainto_tsquery('french', :q)) AS rank "
+            f"FROM objets WHERE {_FTS_DOC} @@ plainto_tsquery('french', :q) "
+            "ORDER BY rank DESC LIMIT :lim"
+        )
+        rows = db.execute(sql, {"q": query, "lim": limit * 3}).all()
+    return [(row[0], float(row[1])) for row in rows]
+
+
+def _fuzzy_ranking(db: Session, query: str, limit: int):
+    """Trigram similarity + ILIKE prefix on the object name.
+
+    Covers two cases the FTS misses:
+    - typos ("mandolorian" vs "mandalorian") via ``similarity()``;
+    - very short prefixes ("mando") via ``ILIKE 'mando%'``.
+    """
+    clean = query.strip().lower()
+    if not clean:
+        return []
+    sql = text(
+        "SELECT id, GREATEST("
+        "  similarity(lower(nom), :q),"
+        "  CASE WHEN lower(nom) LIKE :prefix THEN 0.9 ELSE 0 END"
+        ") AS sim "
+        "FROM objets "
+        "WHERE similarity(lower(nom), :q) >= :thr "
+        "   OR lower(nom) LIKE :prefix "
+        "ORDER BY sim DESC LIMIT :lim"
+    )
+    rows = db.execute(
+        sql,
+        {
+            "q": clean,
+            "prefix": f"{clean}%",
+            "thr": FUZZY_THRESHOLD,
+            "lim": limit * 3,
+        },
+    ).all()
     return [(row[0], float(row[1])) for row in rows]
 
 
@@ -74,7 +134,8 @@ def search(req: schemas.SearchRequest, db: Session = Depends(get_db)):
     threshold = req.threshold if req.threshold is not None else SEMANTIC_THRESHOLD
     semantic = _semantic_ranking(db, query, req.limit, threshold)
     fulltext = _fulltext_ranking(db, query, req.limit)
-    fused = _reciprocal_rank_fusion(semantic, fulltext)[: req.limit]
+    fuzzy = _fuzzy_ranking(db, query, req.limit)
+    fused = _reciprocal_rank_fusion(semantic, fulltext, fuzzy)[: req.limit]
 
     if not fused:
         return []
