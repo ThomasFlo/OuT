@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 data class AddFormState(
@@ -91,6 +92,14 @@ class AddObjetViewModel @Inject constructor(
     // Set when editing an existing object: lets us preserve server id and
     // creation date across the save instead of creating a new row.
     private var editingEntity: ObjetEntity? = null
+
+    // Atomic CAS guard against re-entering save() / delete() before the in-flight
+    // coroutine has finished. The button's enabled flag already gates the UI, but
+    // Compose's recomposition lag opens a ~tens-of-ms window where a fast double-
+    // tap can reach the handler twice — and that's exactly what was producing the
+    // pairs of consecutive-id rows on the server.
+    private val saveInFlight = AtomicBoolean(false)
+    private val deleteInFlight = AtomicBoolean(false)
 
     init {
         viewModelScope.launch {
@@ -225,10 +234,17 @@ class AddObjetViewModel @Inject constructor(
 
     fun delete(onDone: () -> Unit) {
         val target = editingEntity ?: return
+        // Hard guard against re-entry: confirm-dialog rapid double tap used to
+        // fire two DELETE calls in flight.
+        if (!deleteInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            runCatching { repository.deleteObjet(target) }
-                .onSuccess { onDone() }
-                .onFailure { e -> _state.update { it.copy(error = e.message ?: "Erreur") } }
+            try {
+                runCatching { repository.deleteObjet(target) }
+                    .onSuccess { onDone() }
+                    .onFailure { e -> _state.update { it.copy(error = e.message ?: "Erreur") } }
+            } finally {
+                deleteInFlight.set(false)
+            }
         }
     }
 
@@ -240,22 +256,30 @@ class AddObjetViewModel @Inject constructor(
             _state.update { it.copy(error = "Nom, zone et emplacement sont requis") }
             return
         }
+        // CAS guard — see saveInFlight declaration above. Without this, a fast
+        // double-tap on "Enregistrer" raced past the button's enabled flag and
+        // produced two POST /objets calls → two rows with consecutive ids.
+        if (!saveInFlight.compareAndSet(false, true)) return
+        _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, error = null) }
-            val result = runCatching {
-                val emplacementId = s.emplacementId ?: repository.createEmplacement(
-                    zoneId = s.zoneId,
-                    nom = s.newEmplacementNom,
-                    description = null,
-                    photoUrl = s.photoEmplacementUrl,
-                ).id
-                repository.saveObjet(buildEntity(s, emplacementId))
-            }
-            result
-                .onSuccess { _state.update { it.copy(saving = false) }; onDone() }
-                .onFailure { e ->
-                    _state.update { it.copy(saving = false, error = e.message ?: "Erreur") }
+            try {
+                val result = runCatching {
+                    val emplacementId = s.emplacementId ?: repository.createEmplacement(
+                        zoneId = s.zoneId,
+                        nom = s.newEmplacementNom,
+                        description = null,
+                        photoUrl = s.photoEmplacementUrl,
+                    ).id
+                    repository.saveObjet(buildEntity(s, emplacementId))
                 }
+                result
+                    .onSuccess { _state.update { it.copy(saving = false) }; onDone() }
+                    .onFailure { e ->
+                        _state.update { it.copy(saving = false, error = e.message ?: "Erreur") }
+                    }
+            } finally {
+                saveInFlight.set(false)
+            }
         }
     }
 

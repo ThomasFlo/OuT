@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 data class ObjetDetailState(
@@ -33,6 +34,11 @@ class ObjetDetailViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ObjetDetailState())
     val state: StateFlow<ObjetDetailState> = _state.asStateFlow()
+
+    // Atomic re-entry guards: the delete/openBottle buttons can be tapped twice
+    // before the UI has a chance to disable them.
+    private val deleteInFlight = AtomicBoolean(false)
+    private val openBottleInFlight = AtomicBoolean(false)
 
     init {
         load()
@@ -58,17 +64,27 @@ class ObjetDetailViewModel @Inject constructor(
 
     fun delete(onDone: () -> Unit) {
         val objet = _state.value.objet ?: return
+        if (!deleteInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            repository.deleteObjet(objet)
-            onDone()
+            try {
+                repository.deleteObjet(objet)
+                onDone()
+            } finally {
+                deleteInFlight.set(false)
+            }
         }
     }
 
     fun openBottle() {
         val serverId = _state.value.objet?.serverId ?: return
+        if (!openBottleInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            runCatching { repository.openBottle(serverId) }
-            load()
+            try {
+                runCatching { repository.openBottle(serverId) }
+                load()
+            } finally {
+                openBottleInFlight.set(false)
+            }
         }
     }
 
