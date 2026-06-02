@@ -54,6 +54,21 @@ async def on_startup() -> None:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
     Base.metadata.create_all(bind=engine)
     with engine.begin() as conn:
+        # Idempotent migrations for the wine enrichment columns added after
+        # the initial schema. Postgres' "ADD COLUMN IF NOT EXISTS" makes
+        # re-running on a fresh table a no-op.
+        for ddl in (
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS enrichment_summary TEXT",
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS apogee_year_min INTEGER",
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS apogee_year_max INTEGER",
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS keeping_year_max INTEGER",
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS pairings_ideal TEXT",
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS pairings_possible TEXT",
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMP",
+            "ALTER TABLE vins ADD COLUMN IF NOT EXISTS enrichment_source VARCHAR(64)",
+        ):
+            conn.execute(text(ddl))
+    with engine.begin() as conn:
         # IVFFlat index for fast approximate cosine search.
         conn.execute(
             text(

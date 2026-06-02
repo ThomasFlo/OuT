@@ -3,6 +3,7 @@ package com.homestock.ui.screens.wine
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homestock.data.local.ObjetEntity
+import com.homestock.data.remote.dto.WinePriorityDto
 import com.homestock.data.remote.dto.WineStats
 import com.homestock.data.repository.HomeStockRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,12 +29,20 @@ class WineViewModel @Inject constructor(
     private val _typeFilter = MutableStateFlow<String?>(null)
     val typeFilter: StateFlow<String?> = _typeFilter.asStateFlow()
 
+    private val _priority = MutableStateFlow<List<WinePriorityDto>>(emptyList())
+    val priority: StateFlow<List<WinePriorityDto>> = _priority.asStateFlow()
+
     init {
         refreshStats()
+        refreshPriority()
     }
 
     fun refreshStats() {
         viewModelScope.launch { _stats.value = repository.wineStats() }
+    }
+
+    fun refreshPriority() {
+        viewModelScope.launch { _priority.value = repository.winesPriority() }
     }
 
     fun setTypeFilter(type: String?) {

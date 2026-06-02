@@ -65,6 +65,29 @@ data class VinDto(
     @SerializedName("notes_degustation") val notesDegustation: String? = null,
     @SerializedName("prix_achat") val prixAchat: Double? = null,
     @SerializedName("a_boire_partir") val aBoirePartir: Int? = null,
+    @SerializedName("enrichment_summary") val enrichmentSummary: String? = null,
+    @SerializedName("apogee_year_min") val apogeeYearMin: Int? = null,
+    @SerializedName("apogee_year_max") val apogeeYearMax: Int? = null,
+    @SerializedName("keeping_year_max") val keepingYearMax: Int? = null,
+    @SerializedName("pairings_ideal") val pairingsIdeal: String? = null,
+    @SerializedName("pairings_possible") val pairingsPossible: String? = null,
+    @SerializedName("enriched_at") val enrichedAt: String? = null,
+)
+
+/** Server-side priority entry: a wine we should drink soon. */
+data class WinePriorityDto(
+    @SerializedName("objet_id") val objetId: Long,
+    val nom: String,
+    val appellation: String? = null,
+    val domaine: String? = null,
+    val millesime: Int? = null,
+    val type: String? = null,
+    @SerializedName("nombre_bouteilles") val nombreBouteilles: Int? = null,
+    @SerializedName("apogee_year_max") val apogeeYearMax: Int? = null,
+    @SerializedName("keeping_year_max") val keepingYearMax: Int? = null,
+    @SerializedName("photo_url") val photoUrl: String? = null,
+    val urgency: String,
+    val reason: String,
 )
 
 data class ObjetDto(

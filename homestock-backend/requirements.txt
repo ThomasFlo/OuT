@@ -9,3 +9,6 @@ python-multipart==0.0.9
 sentence-transformers==2.7.0
 websockets==12.0
 pillow==10.3.0
+# Wine enrichment (POST /vins/{id}/enrich). Optional at runtime — the endpoint
+# returns 503 if ANTHROPIC_API_KEY isn't set.
+anthropic==0.39.0
