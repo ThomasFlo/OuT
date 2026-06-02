@@ -154,7 +154,11 @@ private fun MainScaffold(viewModel: MainViewModel) {
                 AddObjetScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.WINE) {
-                WineScreen(onBack = { navController.popBackStack() }, connected = connected)
+                WineScreen(
+                    onBack = { navController.popBackStack() },
+                    onObjet = { navController.navigate(Routes.objetDetail(it)) },
+                    connected = connected,
+                )
             }
         }
     }

@@ -163,10 +163,24 @@ fun ObjetDetailScreen(
                     millesime = objet.vinMillesime,
                     type = objet.vinType,
                     bouteilles = objet.vinNombreBouteilles,
+                    enrichment = state.vinEnrichment,
+                    enriching = state.enriching,
                     onOpenBottle = { confirmHaptic(); viewModel.openBottle() },
+                    onEnrich = { viewModel.enrichWine() },
                 )
             }
         }
+    }
+
+    state.enrichmentError?.let { msg ->
+        ConfirmDialog(
+            title = "Enrichissement impossible",
+            message = msg,
+            confirmLabel = "OK",
+            destructive = false,
+            onConfirm = { viewModel.clearEnrichmentError() },
+            onDismiss = { viewModel.clearEnrichmentError() },
+        )
     }
 
     if (showDeleteConfirm && objet != null) {
@@ -355,6 +369,7 @@ private fun InfoCard(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun WineCard(
     appellation: String?,
@@ -362,7 +377,10 @@ private fun WineCard(
     millesime: Int?,
     type: String?,
     bouteilles: Int?,
+    enrichment: com.homestock.data.remote.dto.VinDto?,
+    enriching: Boolean,
     onOpenBottle: () -> Unit,
+    onEnrich: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -380,12 +398,84 @@ private fun WineCard(
             millesime?.let { DetailRow("Millésime", it.toString()) }
             type?.takeIf { it.isNotBlank() }?.let { DetailRow("Type", it) }
             bouteilles?.let { DetailRow("Bouteilles restantes", it.toString()) }
+
+            enrichment?.let { e ->
+                e.enrichmentSummary?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.size(6.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+                val apogee = formatYearRange(e.apogeeYearMin, e.apogeeYearMax)
+                if (apogee != null) DetailRow("Apogée", apogee)
+                e.keepingYearMax?.let { DetailRow("À boire avant", it.toString()) }
+
+                e.pairingsIdeal?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.size(4.dp))
+                    Text("Accords idéaux", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        it.split(",").map { p -> p.trim() }.filter { p -> p.isNotEmpty() }
+                            .forEach { dish ->
+                                androidx.compose.material3.SuggestionChip(
+                                    onClick = {},
+                                    label = { Text(dish) },
+                                )
+                            }
+                    }
+                }
+                e.pairingsPossible?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.size(2.dp))
+                    Text("Aussi possible", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        it.split(",").map { p -> p.trim() }.filter { p -> p.isNotEmpty() }
+                            .forEach { dish ->
+                                androidx.compose.material3.SuggestionChip(
+                                    onClick = {},
+                                    label = { Text(dish) },
+                                )
+                            }
+                    }
+                }
+            }
+
             Spacer(Modifier.size(8.dp))
-            Button(onClick = onOpenBottle, modifier = Modifier.fillMaxWidth()) {
-                Text("Je débouche une bouteille")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onOpenBottle,
+                    modifier = Modifier.weight(1f),
+                    enabled = (bouteilles ?: 0) > 0,
+                ) { Text("Je débouche") }
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onEnrich,
+                    modifier = Modifier.weight(1f),
+                    enabled = !enriching,
+                ) {
+                    Text(
+                        when {
+                            enriching -> "Analyse…"
+                            enrichment?.enrichmentSummary.isNullOrBlank() -> "Analyser"
+                            else -> "Réanalyser"
+                        },
+                    )
+                }
             }
         }
     }
+}
+
+/** "Boire entre 2024 et 2028" / "Apogée 2026" / null. */
+private fun formatYearRange(min: Int?, max: Int?): String? = when {
+    min != null && max != null && min != max -> "Boire entre $min et $max"
+    min != null && max != null -> "Apogée $min"
+    min != null -> "À partir de $min"
+    max != null -> "Avant $max"
+    else -> null
 }
 
 @Composable

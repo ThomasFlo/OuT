@@ -37,6 +37,39 @@ services:
     networks:
       - homestock-net
 
+  # Local LLM for wine enrichment (replaces the previous Anthropic dependency).
+  # Default model is Mistral 7B Instruct: ~4.5 GB on disk, ~5 GB RAM during
+  # inference, 10–25 s per call on CPU after warm-up. Trained heavily on
+  # French, which gives noticeably better sommelier output than 3B options.
+  # Drop to OLLAMA_MODEL=llama3.2:3b on a smaller NAS (~2 GB).
+  homestock-ollama:
+    image: ollama/ollama:latest
+    container_name: homestock-ollama
+    restart: unless-stopped
+    volumes:
+      - homestock-ollama-models:/root/.ollama
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b-instruct}
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        ollama serve &
+        SERVE_PID=$$!
+        # Wait for the daemon to accept commands, then pull the model. This
+        # is idempotent — if the volume already has it, the pull is a no-op.
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        ollama pull "$$OLLAMA_MODEL" || echo "Pull failed, will retry on demand"
+        wait $$SERVE_PID
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    networks:
+      - homestock-net
+
   homestock-api:
     build:
       context: .
@@ -48,12 +81,18 @@ services:
         condition: service_healthy
       homestock-embeddings:
         condition: service_healthy
+      homestock-ollama:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-homestock}:${POSTGRES_PASSWORD:-homestock}@homestock-db:5432/${POSTGRES_DB:-homestock}
       EMBEDDING_SERVICE_URL: http://homestock-embeddings:9000
       PHOTOS_DIR: /data/photos
       EMBEDDING_DIM: "384"
       SEMANTIC_THRESHOLD: ${SEMANTIC_THRESHOLD:-0.4}
+      # Local LLM used by the wine enrichment endpoint. Leave OLLAMA_BASE_URL
+      # blank to disable enrichment entirely (the endpoint will return 503).
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://homestock-ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b-instruct}
     ports:
       - "${API_PORT:-8080}:8000"
     volumes:
@@ -72,3 +111,4 @@ volumes:
   homestock-db-data:
   homestock-photos:
   homestock-model-cache:
+  homestock-ollama-models:

@@ -108,4 +108,15 @@ class Vin(Base):
     prix_achat: Mapped[float | None] = mapped_column(Float, nullable=True)
     a_boire_partir: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # AI-enriched description (Claude). Populated on demand by POST
+    # /vins/{id}/enrich; nullable so a wine without enrichment still works.
+    enrichment_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    apogee_year_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    apogee_year_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    keeping_year_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pairings_ideal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pairings_possible: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    enrichment_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     objet: Mapped["Objet"] = relationship(back_populates="vin")

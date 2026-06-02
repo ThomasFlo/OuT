@@ -54,6 +54,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.homestock.data.local.EmplacementEntity
 import com.homestock.ui.components.CameraCapture
 import com.homestock.ui.components.ConnectionDot
+import com.homestock.ui.components.GalleryPickerButton
 import com.homestock.ui.components.ObjetResultCard
 import com.homestock.ui.components.PhotoThumbnail
 import com.homestock.ui.components.SectionHeader
@@ -245,6 +246,7 @@ fun ZoneDetailScreen(
             onNameChange = { name -> viewModel.updateDraft { it.copy(nom = name) } },
             onDescriptionChange = { desc -> viewModel.updateDraft { it.copy(description = desc) } },
             onTakePhoto = { capturingPhoto = true },
+            onGalleryBytes = { bytes -> viewModel.uploadDraftPhoto(bytes) },
             onRemovePhoto = { viewModel.removeDraftPhoto() },
             onSave = { viewModel.saveDraft() },
             onDelete = {
@@ -288,6 +290,7 @@ private fun EmplacementDraftDialog(
     onNameChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onTakePhoto: () -> Unit,
+    onGalleryBytes: (ByteArray) -> Unit,
     onRemovePhoto: () -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
@@ -319,10 +322,17 @@ private fun EmplacementDraftDialog(
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        TextButton(onClick = onTakePhoto) {
-                            Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = onTakePhoto, enabled = !draft.uploading) {
+                                Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (draft.photoUrl.isNullOrBlank()) "Caméra" else "Reprendre")
+                            }
                             Spacer(Modifier.width(4.dp))
-                            Text(if (draft.photoUrl.isNullOrBlank()) "Ajouter une photo" else "Reprendre")
+                            GalleryPickerButton(
+                                onBytes = onGalleryBytes,
+                                enabled = !draft.uploading,
+                            )
                         }
                         if (!draft.photoUrl.isNullOrBlank()) {
                             TextButton(
