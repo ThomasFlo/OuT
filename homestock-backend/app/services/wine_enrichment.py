@@ -21,13 +21,14 @@ import httpx
 log = logging.getLogger("homestock.wine_enrichment")
 
 # Defaults match docker-compose. Override via env to point at a remote
-# Ollama or swap the model (e.g. mistral:7b for better French quality).
+# Ollama or swap the model (e.g. llama3.2:3b on a smaller NAS).
 DEFAULT_BASE_URL = "http://homestock-ollama:11434"
-DEFAULT_MODEL = "llama3.2:3b"
+DEFAULT_MODEL = "mistral:7b-instruct"
 
-# Generous timeout: cold-start inference on CPU can take 20–30 s the first
-# time a model is loaded into RAM. After the warm-up, it drops to 5–10 s.
-CALL_TIMEOUT_SECONDS = 90.0
+# Generous timeout: with a 7B model, cold-start inference on CPU can take
+# 40–60 s the first time the weights are paged into RAM, then drop to
+# 10–25 s. Bumped from 90 s to 120 s to be safe.
+CALL_TIMEOUT_SECONDS = 120.0
 
 SYSTEM_PROMPT = """Tu es un sommelier expert français. À partir des \
 informations de base sur un vin (appellation, domaine, millésime, type), \

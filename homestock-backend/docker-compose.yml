@@ -38,10 +38,10 @@ services:
       - homestock-net
 
   # Local LLM for wine enrichment (replaces the previous Anthropic dependency).
-  # Default model is a 3B-parameter instruct model that fits in ~2 GB of RAM
-  # and runs fine on CPU for the one-shot calls we make (5–15s typical).
-  # Override with OLLAMA_MODEL to swap (e.g. mistral:7b-instruct on beefier
-  # hardware, or qwen2.5:3b-instruct for a slightly different French style).
+  # Default model is Mistral 7B Instruct: ~4.5 GB on disk, ~5 GB RAM during
+  # inference, 10–25 s per call on CPU after warm-up. Trained heavily on
+  # French, which gives noticeably better sommelier output than 3B options.
+  # Drop to OLLAMA_MODEL=llama3.2:3b on a smaller NAS (~2 GB).
   homestock-ollama:
     image: ollama/ollama:latest
     container_name: homestock-ollama
@@ -49,7 +49,7 @@ services:
     volumes:
       - homestock-ollama-models:/root/.ollama
     environment:
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b-instruct}
     entrypoint: /bin/sh
     command:
       - -c
@@ -92,7 +92,7 @@ services:
       # Local LLM used by the wine enrichment endpoint. Leave OLLAMA_BASE_URL
       # blank to disable enrichment entirely (the endpoint will return 503).
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://homestock-ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b-instruct}
     ports:
       - "${API_PORT:-8080}:8000"
     volumes:
