@@ -1,10 +1,13 @@
-"""Wine enrichment via Anthropic Claude.
+"""Wine enrichment via a local Ollama server.
 
-Given the user-provided wine basics (appellation, domaine, millésime, type),
-ask Claude for a structured summary with drinking window and food pairings.
-The endpoint that calls this is POST /vins/{id}/enrich; nothing else in the
-app depends on the LLM being reachable, so missing credentials simply make
-the endpoint return 503.
+We POST a strict-JSON sommelier prompt to the Ollama HTTP API; the
+``format: "json"`` parameter constrains the model to emit a JSON object.
+A small instruct model (3B) is enough — the schema is tight and the call
+is one-shot.
+
+If ``OLLAMA_BASE_URL`` is empty, the endpoint that calls into here raises
+EnrichmentDisabled, which maps to HTTP 503 — so the rest of the app keeps
+working without a local LLM.
 """
 from __future__ import annotations
 
@@ -13,17 +16,23 @@ import logging
 import os
 from dataclasses import dataclass
 
+import httpx
+
 log = logging.getLogger("homestock.wine_enrichment")
 
-# Use the cheapest Claude model — wine enrichment is short, structured, and
-# very tolerant of model size.
-MODEL = "claude-haiku-4-5-20251001"
+# Defaults match docker-compose. Override via env to point at a remote
+# Ollama or swap the model (e.g. mistral:7b for better French quality).
+DEFAULT_BASE_URL = "http://homestock-ollama:11434"
+DEFAULT_MODEL = "llama3.2:3b"
 
-# The prompt is explicit about JSON output to avoid having to parse prose.
-# Years are bounded so a model hallucination ("year 2200") becomes obvious.
-SYSTEM_PROMPT = """Tu es un sommelier expert. À partir des informations de base \
-sur un vin (appellation, domaine, millésime, type), tu retournes UNIQUEMENT \
-un objet JSON valide (pas de texte autour, pas de markdown) avec ces clés :
+# Generous timeout: cold-start inference on CPU can take 20–30 s the first
+# time a model is loaded into RAM. After the warm-up, it drops to 5–10 s.
+CALL_TIMEOUT_SECONDS = 90.0
+
+SYSTEM_PROMPT = """Tu es un sommelier expert français. À partir des \
+informations de base sur un vin (appellation, domaine, millésime, type), \
+tu retournes UNIQUEMENT un objet JSON valide (pas de texte autour, pas \
+de markdown) avec ces clés :
 
 {
   "summary": "Résumé sommelier en 2-4 phrases en français — caractère, robe, \
@@ -61,7 +70,21 @@ class EnrichmentError(Exception):
 
 
 class EnrichmentDisabled(EnrichmentError):
-    """Raised when no API key is configured — the endpoint maps this to 503."""
+    """Raised when no LLM is configured — endpoint maps this to 503."""
+
+
+def _ollama_url() -> str | None:
+    base = os.environ.get("OLLAMA_BASE_URL", DEFAULT_BASE_URL).strip()
+    return base or None
+
+
+def _model_name() -> str:
+    return os.environ.get("OLLAMA_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+
+
+# Expose the resolved model so the router can record it as the
+# enrichment source on the persisted wine row.
+MODEL = _model_name()
 
 
 def _build_user_prompt(
@@ -71,7 +94,6 @@ def _build_user_prompt(
     millesime: int | None,
     type_: str | None,
 ) -> str:
-    """Compact prompt with only the fields the user filled in."""
     parts: list[str] = []
     if appellation:
         parts.append(f"Appellation : {appellation}")
@@ -93,72 +115,86 @@ def enrich_wine(
     millesime: int | None,
     type_: str | None,
 ) -> WineEnrichment:
-    """Synchronous call to Claude. Returns the parsed enrichment or raises."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    """Synchronous call to Ollama. Returns the parsed enrichment or raises."""
+    base_url = _ollama_url()
+    if not base_url:
         raise EnrichmentDisabled(
-            "ANTHROPIC_API_KEY n'est pas configuré côté serveur."
+            "OLLAMA_BASE_URL n'est pas configuré côté serveur."
         )
 
-    # Late import so the API container starts even when the SDK is missing
-    # (e.g. on first install before pip install).
-    try:
-        from anthropic import Anthropic
-    except ImportError as exc:  # pragma: no cover - install-time only
-        raise EnrichmentError(
-            "Le SDK anthropic n'est pas installé (pip install anthropic)."
-        ) from exc
-
-    client = Anthropic(api_key=api_key)
+    model = _model_name()
     user_prompt = _build_user_prompt(
         appellation=appellation,
         domaine=domaine,
         millesime=millesime,
         type_=type_,
     )
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        # Forces the model to emit a well-formed JSON document — Ollama
+        # uses grammar-constrained decoding under the hood.
+        "format": "json",
+        "stream": False,
+        # Low temperature: we want stable, factual sommelier output, not
+        # creative writing.
+        "options": {"temperature": 0.2},
+    }
+
     try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=600,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+        with httpx.Client(timeout=CALL_TIMEOUT_SECONDS) as client:
+            resp = client.post(f"{base_url}/api/chat", json=payload)
+    except httpx.HTTPError as exc:
+        log.exception("Ollama call failed")
+        raise EnrichmentError(f"Appel LLM échoué : {exc}") from exc
+
+    if resp.status_code == 404:
+        # Most likely "model not found" — surface a helpful hint.
+        raise EnrichmentError(
+            f"Modèle « {model} » indisponible sur Ollama. "
+            f"Lance « docker exec homestock-ollama ollama pull {model} »."
         )
-    except Exception as exc:  # noqa: BLE001 - surface any API/network error
-        log.exception("Claude call failed")
-        raise EnrichmentError(f"Appel Claude échoué : {exc}") from exc
-
-    # Claude returns a list of content blocks; we expect a single text block.
-    raw = "".join(
-        block.text for block in response.content if getattr(block, "type", "") == "text"
-    ).strip()
-    if not raw:
-        raise EnrichmentError("Réponse vide de Claude.")
-
-    # Defensive: strip a fenced code block if the model added one despite the prompt.
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        # remove a leading "json\n" if present
-        if raw.lower().startswith("json"):
-            raw = raw[4:].lstrip()
+    if resp.status_code >= 400:
+        raise EnrichmentError(
+            f"Ollama a renvoyé {resp.status_code} : {resp.text[:200]}"
+        )
 
     try:
-        payload = json.loads(raw)
+        body = resp.json()
     except json.JSONDecodeError as exc:
-        log.warning("Claude returned non-JSON: %r", raw[:200])
-        raise EnrichmentError(f"JSON invalide : {exc}") from exc
+        raise EnrichmentError(f"Réponse Ollama invalide : {exc}") from exc
+
+    content = (body.get("message") or {}).get("content", "").strip()
+    if not content:
+        raise EnrichmentError("Réponse vide d'Ollama.")
+
+    # The `format: "json"` mode should guarantee valid JSON, but small
+    # models occasionally wrap it in ``` fences — strip them defensively.
+    if content.startswith("```"):
+        content = content.strip("`")
+        if content.lower().startswith("json"):
+            content = content[4:].lstrip()
+
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        log.warning("Ollama returned non-JSON: %r", content[:200])
+        raise EnrichmentError(f"JSON invalide du modèle : {exc}") from exc
 
     return WineEnrichment(
-        summary=str(payload.get("summary") or "").strip(),
-        apogee_year_min=_safe_year(payload.get("apogee_year_min")),
-        apogee_year_max=_safe_year(payload.get("apogee_year_max")),
-        keeping_year_max=_safe_year(payload.get("keeping_year_max")),
-        pairings_ideal=_safe_str_list(payload.get("pairings_ideal")),
-        pairings_possible=_safe_str_list(payload.get("pairings_possible")),
+        summary=str(parsed.get("summary") or "").strip(),
+        apogee_year_min=_safe_year(parsed.get("apogee_year_min")),
+        apogee_year_max=_safe_year(parsed.get("apogee_year_max")),
+        keeping_year_max=_safe_year(parsed.get("keeping_year_max")),
+        pairings_ideal=_safe_str_list(parsed.get("pairings_ideal")),
+        pairings_possible=_safe_str_list(parsed.get("pairings_possible")),
     )
 
 
 def _safe_year(v) -> int | None:
-    """Accept ints and digit strings; reject implausible years."""
     if v is None:
         return None
     try:
