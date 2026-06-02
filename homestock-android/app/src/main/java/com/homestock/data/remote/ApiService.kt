@@ -10,6 +10,7 @@ import com.homestock.data.remote.dto.ObjetRequest
 import com.homestock.data.remote.dto.ObjetSearchResultDto
 import com.homestock.data.remote.dto.PhotoUploadResponse
 import com.homestock.data.remote.dto.SearchRequest
+import com.homestock.data.remote.dto.WinePriorityDto
 import com.homestock.data.remote.dto.WineStats
 import com.homestock.data.remote.dto.ZoneDto
 import com.homestock.data.remote.dto.ZoneRequest
@@ -125,6 +126,12 @@ interface ApiService {
 
     @POST("vins/{id}/deboucher")
     suspend fun openBottle(@Path("id") id: Long): ObjetDto
+
+    @POST("vins/{id}/enrich")
+    suspend fun enrichWine(@Path("id") id: Long): ObjetDto
+
+    @GET("vins/priority")
+    suspend fun winesPriority(): List<WinePriorityDto>
 
     // Photos
     @Multipart

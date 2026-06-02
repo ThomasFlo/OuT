@@ -54,6 +54,9 @@ services:
       PHOTOS_DIR: /data/photos
       EMBEDDING_DIM: "384"
       SEMANTIC_THRESHOLD: ${SEMANTIC_THRESHOLD:-0.4}
+      # Optional: leave empty to disable wine enrichment. Set in a .env file
+      # next to this compose file, never commit the key.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "${API_PORT:-8080}:8000"
     volumes:

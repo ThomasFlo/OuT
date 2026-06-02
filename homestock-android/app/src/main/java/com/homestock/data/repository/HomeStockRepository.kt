@@ -327,6 +327,24 @@ class HomeStockRepository @Inject constructor(
         refreshAll()
     }
 
+    /**
+     * Triggers the server-side Claude enrichment for a wine and returns its
+     * refreshed VinDto. May throw — caller handles 503 (key missing) vs 502
+     * (LLM error) by inspecting the HttpException message.
+     */
+    suspend fun enrichWine(objetServerId: Long): com.homestock.data.remote.dto.VinDto? {
+        val obj = api.enrichWine(objetServerId)
+        return obj.vin
+    }
+
+    /** Fetch the latest server VinDto for one objet (used by the wine fiche). */
+    suspend fun fetchVinDto(objetServerId: Long): com.homestock.data.remote.dto.VinDto? =
+        runCatching { api.getObjet(objetServerId).vin }.getOrNull()
+
+    /** Wines we should drink soon, per the server's ranking. */
+    suspend fun winesPriority(): List<com.homestock.data.remote.dto.WinePriorityDto> =
+        runCatching { api.winesPriority() }.getOrDefault(emptyList())
+
     // ----- Photos -----
     suspend fun uploadPhoto(bytes: ByteArray, fileName: String = "photo.jpg"): String? =
         runCatching {

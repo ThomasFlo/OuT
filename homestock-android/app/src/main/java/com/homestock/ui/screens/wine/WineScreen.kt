@@ -40,12 +40,14 @@ import com.homestock.ui.components.rememberConfirmHaptic
 @Composable
 fun WineScreen(
     onBack: () -> Unit,
+    onObjet: (Long) -> Unit = {},
     connected: Boolean = true,
     viewModel: WineViewModel = hiltViewModel(),
 ) {
     val wines by viewModel.wines.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
     val typeFilter by viewModel.typeFilter.collectAsStateWithLifecycle()
+    val priority by viewModel.priority.collectAsStateWithLifecycle()
     val confirmHaptic = rememberConfirmHaptic()
 
     val filtered = wines.filter { typeFilter == null || it.vinType == typeFilter }
@@ -64,6 +66,24 @@ fun WineScreen(
         },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+            if (priority.isNotEmpty()) {
+                item {
+                    Text(
+                        "À consommer en priorité",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                items(priority) { p ->
+                    PriorityCard(p, onClick = {
+                        // The list uses local objet localIds for routing; we
+                        // need to find the matching wine in the cached list
+                        // (server returns objet_id, ObjetEntity has localId).
+                        wines.firstOrNull { it.serverId == p.objetId }?.let { onObjet(it.localId) }
+                    })
+                }
+            }
             item {
                 stats?.let { s ->
                     Card(
@@ -104,7 +124,8 @@ fun WineScreen(
             }
             items(filtered) { wine ->
                 Card(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    onClick = { onObjet(wine.localId) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     ),
@@ -132,6 +153,58 @@ fun WineScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PriorityCard(
+    p: com.homestock.data.remote.dto.WinePriorityDto,
+    onClick: () -> Unit,
+) {
+    val accent = when (p.urgency) {
+        "past_limit" -> MaterialTheme.colorScheme.errorContainer
+        "past_peak" -> MaterialTheme.colorScheme.tertiaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val onAccent = when (p.urgency) {
+        "past_limit" -> MaterialTheme.colorScheme.onErrorContainer
+        "past_peak" -> MaterialTheme.colorScheme.onTertiaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = accent),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                p.appellation ?: p.nom,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                color = onAccent,
+            )
+            val subtitle = buildString {
+                p.domaine?.let { append("$it ") }
+                p.millesime?.let { append("($it) ") }
+                p.type?.let { append("• $it") }
+            }.trim()
+            if (subtitle.isNotEmpty()) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = onAccent)
+            }
+            Text(
+                p.reason,
+                style = MaterialTheme.typography.bodyMedium,
+                color = onAccent,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            p.nombreBouteilles?.let {
+                Text(
+                    "$it bouteille${if (it > 1) "s" else ""} restante${if (it > 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = onAccent,
+                )
             }
         }
     }

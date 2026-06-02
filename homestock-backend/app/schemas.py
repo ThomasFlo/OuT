@@ -88,10 +88,38 @@ class VinBase(BaseModel):
     a_boire_partir: int | None = None
 
 
-class VinOut(VinBase):
+class VinEnrichment(BaseModel):
+    enrichment_summary: str | None = None
+    apogee_year_min: int | None = None
+    apogee_year_max: int | None = None
+    keeping_year_max: int | None = None
+    pairings_ideal: str | None = None
+    pairings_possible: str | None = None
+    enriched_at: datetime | None = None
+    enrichment_source: str | None = None
+
+
+class VinOut(VinBase, VinEnrichment):
     model_config = ConfigDict(from_attributes=True)
     id: int
     objet_id: int
+
+
+class WinePriorityItem(BaseModel):
+    """A single row of the priority list ('which wines to drink soon')."""
+    model_config = ConfigDict(from_attributes=True)
+    objet_id: int
+    nom: str
+    appellation: str | None = None
+    domaine: str | None = None
+    millesime: int | None = None
+    type: str | None = None
+    nombre_bouteilles: int | None = None
+    apogee_year_max: int | None = None
+    keeping_year_max: int | None = None
+    photo_url: str | None = None
+    urgency: str  # "past_peak" | "near_limit" | "past_limit"
+    reason: str  # human-readable French explanation
 
 
 # ----- Objets -----
