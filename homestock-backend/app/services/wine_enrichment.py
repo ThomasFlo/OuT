@@ -26,9 +26,10 @@ DEFAULT_BASE_URL = "http://homestock-ollama:11434"
 DEFAULT_MODEL = "mistral:7b-instruct"
 
 # Generous timeout: with a 7B model, cold-start inference on CPU can take
-# 40–60 s the first time the weights are paged into RAM, then drop to
-# 10–25 s. Bumped from 90 s to 120 s to be safe.
-CALL_TIMEOUT_SECONDS = 120.0
+# 60–90 s the first time the weights are paged into RAM, then drop to
+# 10–25 s on a warm model. 180 s is a safety net for a NAS that just
+# rebooted; warm calls are nowhere near this.
+CALL_TIMEOUT_SECONDS = 180.0
 
 SYSTEM_PROMPT = """Tu es un sommelier expert français. À partir des \
 informations de base sur un vin (appellation, domaine, millésime, type), \
@@ -145,9 +146,28 @@ def enrich_wine(
         "options": {"temperature": 0.2},
     }
 
+    log.info("Calling Ollama at %s with model %s", base_url, model)
     try:
-        with httpx.Client(timeout=CALL_TIMEOUT_SECONDS) as client:
+        # Split timeouts: connection should be fast (LAN), but reads can
+        # be slow on a cold-start 7B inference. Httpx defaults to a single
+        # timeout for everything, which made cold starts trip the wrong
+        # error message in earlier builds.
+        timeout = httpx.Timeout(connect=10.0, read=CALL_TIMEOUT_SECONDS,
+                                write=10.0, pool=10.0)
+        with httpx.Client(timeout=timeout) as client:
             resp = client.post(f"{base_url}/api/chat", json=payload)
+    except httpx.ConnectError as exc:
+        raise EnrichmentError(
+            "Ollama injoignable. Vérifie que le conteneur homestock-ollama "
+            f"tourne (docker ps) et est joignable sur {base_url}."
+        ) from exc
+    except httpx.ReadTimeout as exc:
+        raise EnrichmentError(
+            f"Ollama n'a pas répondu en {int(CALL_TIMEOUT_SECONDS)}s. "
+            "Le modèle finit peut-être de charger en RAM ; réessaie dans "
+            "une minute. Si ça persiste, le NAS manque de RAM pour ce modèle "
+            "— bascule sur OLLAMA_MODEL=llama3.2:3b."
+        ) from exc
     except httpx.HTTPError as exc:
         log.exception("Ollama call failed")
         raise EnrichmentError(f"Appel LLM échoué : {exc}") from exc

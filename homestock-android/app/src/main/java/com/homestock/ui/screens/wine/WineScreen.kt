@@ -41,6 +41,7 @@ import com.homestock.ui.components.rememberConfirmHaptic
 fun WineScreen(
     onBack: () -> Unit,
     onObjet: (Long) -> Unit = {},
+    onAddBottle: () -> Unit = {},
     connected: Boolean = true,
     viewModel: WineViewModel = hiltViewModel(),
 ) {
@@ -62,6 +63,18 @@ fun WineScreen(
                     }
                 },
                 actions = { ConnectionDot(connected, Modifier.padding(end = 12.dp)) },
+            )
+        },
+        floatingActionButton = {
+            androidx.compose.material3.ExtendedFloatingActionButton(
+                onClick = onAddBottle,
+                icon = {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.Add,
+                        contentDescription = null,
+                    )
+                },
+                text = { Text("Ajouter une bouteille") },
             )
         },
     ) { padding ->

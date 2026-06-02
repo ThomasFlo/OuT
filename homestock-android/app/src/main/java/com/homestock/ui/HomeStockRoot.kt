@@ -29,6 +29,7 @@ import com.homestock.ui.screens.detail.ObjetDetailScreen
 import com.homestock.ui.screens.search.SearchScreen
 import com.homestock.ui.screens.settings.SettingsScreen
 import com.homestock.ui.screens.setup.SetupScreen
+import com.homestock.ui.screens.wine.AddWineScreen
 import com.homestock.ui.screens.wine.WineScreen
 import com.homestock.ui.screens.zones.ZoneDetailScreen
 import com.homestock.ui.screens.zones.ZonesScreen
@@ -157,8 +158,12 @@ private fun MainScaffold(viewModel: MainViewModel) {
                 WineScreen(
                     onBack = { navController.popBackStack() },
                     onObjet = { navController.navigate(Routes.objetDetail(it)) },
+                    onAddBottle = { navController.navigate(Routes.ADD_WINE) },
                     connected = connected,
                 )
+            }
+            composable(Routes.ADD_WINE) {
+                AddWineScreen(onDone = { navController.popBackStack() })
             }
         }
     }

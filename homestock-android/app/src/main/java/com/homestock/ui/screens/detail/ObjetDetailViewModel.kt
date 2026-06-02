@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homestock.data.local.ObjetEntity
+import com.homestock.data.remote.apiErrorMessage
 import com.homestock.data.remote.dto.VinDto
 import com.homestock.data.repository.HomeStockRepository
 import com.homestock.domain.model.Categories
@@ -102,7 +103,7 @@ class ObjetDetailViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             enriching = false,
-                            enrichmentError = e.message ?: "Échec de l'enrichissement",
+                            enrichmentError = apiErrorMessage(e) ?: "Échec de l'enrichissement",
                         )
                     }
                 }
