@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homestock.domain.model.Categories
 import com.homestock.domain.model.EtatOptions
 import com.homestock.domain.model.WineTypes
+import com.homestock.ui.components.GalleryPickerButton
 import com.homestock.ui.components.PhotoThumbnail
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -78,7 +79,12 @@ private fun Dropdown(
 }
 
 @Composable
-fun StepObjet(viewModel: AddObjetViewModel, state: AddFormState, onCamera: () -> Unit) {
+fun StepObjet(
+    viewModel: AddObjetViewModel,
+    state: AddFormState,
+    onCamera: () -> Unit,
+    onGalleryBytes: (ByteArray) -> Unit,
+) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -123,13 +129,19 @@ fun StepObjet(viewModel: AddObjetViewModel, state: AddFormState, onCamera: () ->
             url = viewModel.photoUrl(state.photoObjetUrl),
             uploading = state.uploading,
             onCamera = onCamera,
+            onGalleryBytes = onGalleryBytes,
         )
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun StepLocalisation(viewModel: AddObjetViewModel, state: AddFormState, onCamera: () -> Unit) {
+fun StepLocalisation(
+    viewModel: AddObjetViewModel,
+    state: AddFormState,
+    onCamera: () -> Unit,
+    onGalleryBytes: (ByteArray) -> Unit,
+) {
     val zones by viewModel.zones.collectAsStateWithLifecycle()
     val emplacements by viewModel.emplacements.collectAsStateWithLifecycle()
 
@@ -175,6 +187,7 @@ fun StepLocalisation(viewModel: AddObjetViewModel, state: AddFormState, onCamera
                 url = viewModel.photoUrl(state.photoEmplacementUrl),
                 uploading = state.uploading,
                 onCamera = onCamera,
+                onGalleryBytes = onGalleryBytes,
             )
         }
     }
@@ -322,10 +335,21 @@ private fun ConfRow(label: String, value: String) {
 }
 
 @Composable
-private fun PhotoRow(label: String, url: String?, uploading: Boolean, onCamera: () -> Unit) {
-    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        OutlinedButton(onClick = onCamera) { Text(if (uploading) "Envoi…" else label) }
-        Spacer(Modifier.width(12.dp))
-        PhotoThumbnail(url, size = 56)
+private fun PhotoRow(
+    label: String,
+    url: String?,
+    uploading: Boolean,
+    onCamera: () -> Unit,
+    onGalleryBytes: (ByteArray) -> Unit,
+) {
+    Column {
+        Text(if (uploading) "Envoi…" else label, fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            OutlinedButton(onClick = onCamera, enabled = !uploading) { Text("Caméra") }
+            Spacer(Modifier.width(8.dp))
+            GalleryPickerButton(onBytes = onGalleryBytes, enabled = !uploading)
+            Spacer(Modifier.width(12.dp))
+            PhotoThumbnail(url, size = 56)
+        }
     }
 }

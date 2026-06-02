@@ -1,8 +1,10 @@
 package com.homestock.ui.components
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -16,6 +18,31 @@ fun compressImageFile(file: File, maxDim: Int = 800, quality: Int = 80): ByteArr
     return ByteArrayOutputStream().use { out ->
         scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
         out.toByteArray()
+    }
+}
+
+/**
+ * Pull a picked-from-gallery image through the same compression pipeline as
+ * a camera shot. Modern phone photos can be 5–10 MB which would waste NAS
+ * disk and Android upload time; we copy the URI bytes to a temp file in the
+ * app cache, run [compressImageFile], then delete the temp.
+ */
+fun compressImageUri(
+    context: Context,
+    uri: Uri,
+    maxDim: Int = 800,
+    quality: Int = 80,
+): ByteArray? {
+    val tmp = File.createTempFile("gallery", ".img", context.cacheDir)
+    return try {
+        val copied = context.contentResolver.openInputStream(uri)?.use { input ->
+            tmp.outputStream().use { out -> input.copyTo(out) }
+        }
+        if (copied == null) null else compressImageFile(tmp, maxDim, quality)
+    } catch (_: Exception) {
+        null
+    } finally {
+        tmp.delete()
     }
 }
 

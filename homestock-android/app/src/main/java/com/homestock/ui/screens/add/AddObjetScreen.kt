@@ -147,8 +147,18 @@ fun AddObjetScreen(
                 )
             }
             when (state.step) {
-                0 -> StepObjet(viewModel, state) { cameraTarget = CameraTarget.OBJET }
-                1 -> StepLocalisation(viewModel, state) { cameraTarget = CameraTarget.EMPLACEMENT }
+                0 -> StepObjet(
+                    viewModel = viewModel,
+                    state = state,
+                    onCamera = { cameraTarget = CameraTarget.OBJET },
+                    onGalleryBytes = viewModel::uploadObjetPhoto,
+                )
+                1 -> StepLocalisation(
+                    viewModel = viewModel,
+                    state = state,
+                    onCamera = { cameraTarget = CameraTarget.EMPLACEMENT },
+                    onGalleryBytes = viewModel::uploadEmplacementPhoto,
+                )
                 2 -> StepDetails(viewModel, state)
                 else -> StepConfirmation(viewModel, state)
             }

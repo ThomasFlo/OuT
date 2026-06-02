@@ -9,6 +9,7 @@ python-multipart==0.0.9
 sentence-transformers==2.7.0
 websockets==12.0
 pillow==10.3.0
-# Wine enrichment (POST /vins/{id}/enrich). Optional at runtime — the endpoint
-# returns 503 if ANTHROPIC_API_KEY isn't set.
-anthropic==0.39.0
+# Sync HTTP client used by the wine enrichment service to call the local
+# Ollama daemon. Stdlib `urllib` would work too, but httpx is much cleaner
+# for JSON requests and gives us a single dependency that's easy to swap.
+httpx==0.27.0
