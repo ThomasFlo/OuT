@@ -10,6 +10,8 @@ import com.homestock.BuildConfig
 import com.homestock.data.remote.ApiService
 import com.homestock.data.remote.dto.AppVersionDto
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import java.io.File
 import java.security.MessageDigest
@@ -65,7 +67,7 @@ class UpdateManager @Inject constructor(
      * Streams the APK into the app cache and verifies the SHA-256.
      * Returns the local file or throws if the hash doesn't match.
      */
-    suspend fun downloadAndVerifyApk(expectedSha256: String?): File {
+    suspend fun downloadAndVerifyApk(expectedSha256: String?): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
         // Use a fresh filename each time to avoid serving a stale partial.
         val tmp = File(dir, "homestock-latest.apk.part")
@@ -74,8 +76,10 @@ class UpdateManager @Inject constructor(
         target.delete()
 
         val body: ResponseBody = api.downloadApk()
-        body.byteStream().use { input ->
-            tmp.outputStream().use { output -> input.copyTo(output) }
+        body.use {
+            it.byteStream().use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output) }
+            }
         }
 
         if (!expectedSha256.isNullOrBlank()) {
@@ -92,7 +96,7 @@ class UpdateManager @Inject constructor(
             tmp.copyTo(target, overwrite = true)
             tmp.delete()
         }
-        return target
+        target
     }
 
     /** True if the user has already granted "install from unknown sources" for us. */

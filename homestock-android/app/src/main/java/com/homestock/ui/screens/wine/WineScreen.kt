@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,7 +71,7 @@ fun WineScreen(
                 onClick = onAddBottle,
                 icon = {
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.Add,
+                        Icons.Filled.Add,
                         contentDescription = null,
                     )
                 },

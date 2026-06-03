@@ -273,7 +273,7 @@ private fun ZoneDropdown(
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             label = { Text("Zone") },
         )
-        androidx.compose.material3.ExposedDropdownMenu(
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
@@ -308,7 +308,7 @@ private fun EmplacementDropdown(
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             label = { Text("Emplacement existant") },
         )
-        androidx.compose.material3.ExposedDropdownMenu(
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
