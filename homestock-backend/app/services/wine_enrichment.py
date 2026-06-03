@@ -47,10 +47,16 @@ arômes typiques.",
 }
 
 Règles :
-- Si tu ne reconnais pas l'appellation ou si les infos sont trop maigres, \
-mets "summary" à "Informations insuffisantes pour un avis fiable." et laisse \
-les autres champs null/[].
-- Les années doivent être plausibles (entre 1990 et 2080).
+- Si tu reconnais l'appellation et le type, tu DOIS estimer les trois \
+années (apogee_year_min, apogee_year_max, keeping_year_max), même \
+approximativement. Ne mets null que si vraiment tu n'as aucune idée.
+- Si tu ne reconnais pas du tout l'appellation ou si les infos sont trop \
+maigres, mets "summary" à "Informations insuffisantes pour un avis fiable." \
+et laisse TOUS les autres champs null/[].
+- Les années doivent être plausibles (entre 1990 et 2080) et cohérentes : \
+apogee_year_min ≤ apogee_year_max ≤ keeping_year_max.
+- En l'absence de millésime, raisonne sur un millésime « actuel » comme \
+référence pour calculer les années.
 - pairings_ideal : 3 à 5 plats qui mettent le vin en valeur.
 - pairings_possible : 3 à 6 plats qui marchent bien sans être parfaits.
 - Les plats sont rédigés en français, en minuscules sauf noms propres.
