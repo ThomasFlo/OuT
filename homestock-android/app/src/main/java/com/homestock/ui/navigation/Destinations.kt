@@ -14,6 +14,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val SETUP = "setup"
     const val WINE = "wine"
+    const val ADD_WINE = "wine/add"
     const val ADD = "add"
     const val ZONE_DETAIL = "zone/{zoneId}"
     const val CATEGORY_DETAIL = "category/{categorie}"

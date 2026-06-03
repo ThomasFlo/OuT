@@ -408,8 +408,22 @@ private fun WineCard(
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
                 }
-                val apogee = formatYearRange(e.apogeeYearMin, e.apogeeYearMax)
-                if (apogee != null) DetailRow("Apogée", apogee)
+                // Break the three drinking dates out as separate rows so the
+                // user can read each one at a glance. We label them in the
+                // order the user thinks about them: "à partir de quand",
+                // "fenêtre idéale", "ne plus boire après".
+                e.apogeeYearMin?.let { DetailRow("À boire à partir de", it.toString()) }
+                val apogeeRange = when {
+                    e.apogeeYearMin != null && e.apogeeYearMax != null &&
+                        e.apogeeYearMin != e.apogeeYearMax ->
+                            "${e.apogeeYearMin} – ${e.apogeeYearMax}"
+                    e.apogeeYearMax != null && e.apogeeYearMin == null ->
+                        "jusqu'à ${e.apogeeYearMax}"
+                    e.apogeeYearMin != null && e.apogeeYearMin == e.apogeeYearMax ->
+                        e.apogeeYearMin.toString()
+                    else -> null
+                }
+                apogeeRange?.let { DetailRow("Fenêtre d'apogée", it) }
                 e.keepingYearMax?.let { DetailRow("À boire avant", it.toString()) }
 
                 e.pairingsIdeal?.takeIf { it.isNotBlank() }?.let {
@@ -469,14 +483,6 @@ private fun WineCard(
     }
 }
 
-/** "Boire entre 2024 et 2028" / "Apogée 2026" / null. */
-private fun formatYearRange(min: Int?, max: Int?): String? = when {
-    min != null && max != null && min != max -> "Boire entre $min et $max"
-    min != null && max != null -> "Apogée $min"
-    min != null -> "À partir de $min"
-    max != null -> "Avant $max"
-    else -> null
-}
 
 @Composable
 private fun DetailRow(label: String, value: String) {
