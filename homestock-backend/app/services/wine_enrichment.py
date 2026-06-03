@@ -46,17 +46,62 @@ arômes typiques.",
   "pairings_possible": ["plat 4", "plat 5", "plat 6", "plat 7"]
 }
 
+Méthode d'estimation des années :
+- Tu DOIS ancrer les trois années sur le millésime fourni (noté M).
+  Calcule les années comme M + offset, où l'offset dépend de la famille du vin.
+- N'utilise pas l'année courante comme point de départ : un vin de millésime
+  2010 n'entre pas en apogée en 2035.
+- Apogée est typiquement une fenêtre de 3 à 8 ans ; la date limite est
+  toujours après l'apogée max.
+
+Table de référence (offsets en années à partir du millésime M) :
+
+| Famille                                   | À partir de | Apogée min..max | Garde max |
+|-------------------------------------------|-------------|------------------|------------|
+| Beaujolais Nouveau / Primeur              | M+0         | M+0 .. M+1       | M+2        |
+| Beaujolais cru (Morgon, Moulin-à-Vent…)   | M+2         | M+4 .. M+8       | M+12       |
+| Bourgogne village rouge                   | M+3         | M+5 .. M+8       | M+12       |
+| Bourgogne 1er/grand cru rouge             | M+5         | M+8 .. M+15      | M+25       |
+| Bordeaux générique / Côtes de Bordeaux    | M+2         | M+3 .. M+6       | M+10       |
+| Bordeaux Saint-Émilion / Pomerol courant  | M+3         | M+5 .. M+10      | M+15       |
+| Bordeaux grand cru classé / 2e vin GCC    | M+5         | M+10 .. M+20     | M+30       |
+| Côtes du Rhône village                    | M+2         | M+3 .. M+6       | M+10       |
+| Châteauneuf-du-Pape, Hermitage            | M+5         | M+8 .. M+15      | M+20       |
+| Loire rouge léger (Chinon, Bourgueil)     | M+2         | M+3 .. M+6       | M+8        |
+| Vin blanc sec courant                     | M+1         | M+1 .. M+2       | M+4        |
+| Bourgogne blanc village                   | M+2         | M+3 .. M+6       | M+10       |
+| Bourgogne blanc 1er/grand cru             | M+3         | M+5 .. M+12      | M+20       |
+| Riesling / Alsace                         | M+2         | M+5 .. M+12      | M+18       |
+| Champagne non-millésimé                   | M+2         | M+3 .. M+6       | M+8        |
+| Champagne millésimé                       | M+5         | M+8 .. M+15      | M+20       |
+| Sauternes / liquoreux                     | M+5         | M+10 .. M+25     | M+40       |
+| Rosé                                      | M+0         | M+0 .. M+2       | M+3        |
+
+Si tu ne reconnais pas la famille avec certitude, choisis l'estimation la
+plus proche du TYPE et de la région ; à défaut, prends la ligne « générique »
+du type concerné.
+
+Exemple complet pour un Beaujolais cru millésime 2020 :
+{
+  "summary": "Le Moulin-à-Vent est le Beaujolais cru le plus structuré et le \
+plus apte à la garde. Sur 2020, robe rubis profond, nez de fruits noirs, \
+épices douces et une trame tannique fine qui s'arrondit avec le temps.",
+  "apogee_year_min": 2024,
+  "apogee_year_max": 2028,
+  "keeping_year_max": 2032,
+  "pairings_ideal": ["coq au vin", "bœuf bourguignon", "civet de lièvre"],
+  "pairings_possible": ["volaille rôtie", "tomme de Savoie", "magret de canard", \
+"plateau de charcuterie"]
+}
+
 Règles :
-- Si tu reconnais l'appellation et le type, tu DOIS estimer les trois \
-années (apogee_year_min, apogee_year_max, keeping_year_max), même \
-approximativement. Ne mets null que si vraiment tu n'as aucune idée.
-- Si tu ne reconnais pas du tout l'appellation ou si les infos sont trop \
-maigres, mets "summary" à "Informations insuffisantes pour un avis fiable." \
-et laisse TOUS les autres champs null/[].
+- Si tu reconnais l'appellation et le type, tu DOIS estimer les trois années \
+en appliquant la table ci-dessus, même approximativement.
+- Si tu ne reconnais PAS du tout l'appellation et que le millésime est absent, \
+mets "summary" à "Informations insuffisantes pour un avis fiable." et laisse \
+TOUS les autres champs null/[].
 - Les années doivent être plausibles (entre 1990 et 2080) et cohérentes : \
 apogee_year_min ≤ apogee_year_max ≤ keeping_year_max.
-- En l'absence de millésime, raisonne sur un millésime « actuel » comme \
-référence pour calculer les années.
 - pairings_ideal : 3 à 5 plats qui mettent le vin en valeur.
 - pairings_possible : 3 à 6 plats qui marchent bien sans être parfaits.
 - Les plats sont rédigés en français, en minuscules sauf noms propres.
@@ -211,11 +256,29 @@ def enrich_wine(
         log.warning("Ollama returned non-JSON: %r", content[:200])
         raise EnrichmentError(f"JSON invalide du modèle : {exc}") from exc
 
+    apogee_min = _safe_year(parsed.get("apogee_year_min"))
+    apogee_max = _safe_year(parsed.get("apogee_year_max"))
+    keep_max = _safe_year(parsed.get("keeping_year_max"))
+
+    # Sanity-check against the millésime so a 7B model hallucinating
+    # "apogée 2036-2048 for a 2023 wine" doesn't pollute the database. If
+    # any of the years sits more than 35 years after the vintage, we drop
+    # all three rather than persisting nonsense — the user can re-try.
+    if millesime and apogee_min and apogee_min > millesime + 35:
+        log.warning(
+            "Dropping suspiciously distant apogée_min %d for millésime %d",
+            apogee_min, millesime,
+        )
+        apogee_min = apogee_max = keep_max = None
+    elif apogee_min and apogee_max and apogee_min > apogee_max:
+        log.warning("apogee_min > apogee_max (%d > %d), dropping", apogee_min, apogee_max)
+        apogee_min = apogee_max = None
+
     return WineEnrichment(
         summary=str(parsed.get("summary") or "").strip(),
-        apogee_year_min=_safe_year(parsed.get("apogee_year_min")),
-        apogee_year_max=_safe_year(parsed.get("apogee_year_max")),
-        keeping_year_max=_safe_year(parsed.get("keeping_year_max")),
+        apogee_year_min=apogee_min,
+        apogee_year_max=apogee_max,
+        keeping_year_max=keep_max,
         pairings_ideal=_safe_str_list(parsed.get("pairings_ideal")),
         pairings_possible=_safe_str_list(parsed.get("pairings_possible")),
     )
