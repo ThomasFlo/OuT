@@ -83,7 +83,7 @@ fun WineScreen(
             if (priority.isNotEmpty()) {
                 item {
                     Text(
-                        "À consommer en priorité",
+                        "Prochaines bouteilles à déboucher",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -177,14 +177,19 @@ private fun PriorityCard(
     p: com.homestock.data.remote.dto.WinePriorityDto,
     onClick: () -> Unit,
 ) {
+    // Colour-coding follows the urgency tiers from /vins/priority:
+    //   past_limit  → red (too late)         past_peak → orange (out of window)
+    //   near_limit  → tertiary (closing)     at_peak   → green (drink now, perfect)
     val accent = when (p.urgency) {
         "past_limit" -> MaterialTheme.colorScheme.errorContainer
         "past_peak" -> MaterialTheme.colorScheme.tertiaryContainer
+        "at_peak" -> MaterialTheme.colorScheme.secondaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     val onAccent = when (p.urgency) {
         "past_limit" -> MaterialTheme.colorScheme.onErrorContainer
         "past_peak" -> MaterialTheme.colorScheme.onTertiaryContainer
+        "at_peak" -> MaterialTheme.colorScheme.onSecondaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Card(
