@@ -107,8 +107,17 @@ def wines_priority(db: Session = Depends(get_db)):
       * we're past its apogee_year_max (out of the peak window);
       * keeping_year_max is within ~2 years of today (window closing).
 
-    Wines without enrichment are intentionally NOT returned — we don't
-    fabricate urgency. The client surfaces a hint about enriching them.
+    Returns wines flagged as ranked by urgency:
+      * past_limit   — drink-by date passed, top priority (red)
+      * past_peak    — out of the peak window (orange)
+      * near_limit   — keeping_year_max within ~2 years
+      * at_peak      — currently inside the optimal window (drink now)
+
+    Wines whose peak is still years away are intentionally NOT returned —
+    they are not actionable yet and would clutter the list.
+
+    Wines without enrichment are also not returned — we don't fabricate
+    urgency. The client surfaces a hint about enriching them.
     """
     current_year = datetime.utcnow().year
     near_threshold = current_year + 2
@@ -125,6 +134,7 @@ def wines_priority(db: Session = Depends(get_db)):
             or_(
                 models.Vin.keeping_year_max.isnot(None),
                 models.Vin.apogee_year_max.isnot(None),
+                models.Vin.apogee_year_min.isnot(None),
             )
         )
         .all()
@@ -133,6 +143,7 @@ def wines_priority(db: Session = Depends(get_db)):
     items: list[schemas.WinePriorityItem] = []
     for obj in candidates:
         vin = obj.vin
+        apogee_min = vin.apogee_year_min
         apogee_max = vin.apogee_year_max
         keep_max = vin.keeping_year_max
 
@@ -153,6 +164,16 @@ def wines_priority(db: Session = Depends(get_db)):
         elif keep_max is not None and keep_max <= near_threshold:
             urgency = "near_limit"
             reason = f"Fenêtre se ferme bientôt (avant {keep_max})."
+        elif (
+            apogee_min is not None
+            and apogee_min <= current_year
+            and (apogee_max is None or current_year <= apogee_max)
+        ):
+            urgency = "at_peak"
+            reason = (
+                f"Dans sa fenêtre d'apogée (jusqu'à {apogee_max})."
+                if apogee_max else "Dans sa fenêtre d'apogée."
+            )
 
         if urgency is None:
             continue
@@ -174,9 +195,10 @@ def wines_priority(db: Session = Depends(get_db)):
             )
         )
 
-    # Most urgent first: past_limit > past_peak > near_limit, then by
-    # keeping_year_max ascending (the sooner it dies, the higher).
-    rank = {"past_limit": 0, "past_peak": 1, "near_limit": 2}
+    # Most urgent first: past_limit > past_peak > near_limit > at_peak.
+    # Within a tier, prefer the one whose window dies sooner — that's the
+    # bottle to open next.
+    rank = {"past_limit": 0, "past_peak": 1, "near_limit": 2, "at_peak": 3}
     items.sort(key=lambda x: (rank[x.urgency], x.keeping_year_max or 9999))
     return items
 
