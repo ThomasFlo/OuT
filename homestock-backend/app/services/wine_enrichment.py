@@ -46,21 +46,390 @@ arômes typiques.",
   "pairings_possible": ["plat 4", "plat 5", "plat 6", "plat 7"]
 }
 
-Règles :
-- Si tu reconnais l'appellation et le type, tu DOIS estimer les trois \
-années (apogee_year_min, apogee_year_max, keeping_year_max), même \
-approximativement. Ne mets null que si vraiment tu n'as aucune idée.
-- Si tu ne reconnais pas du tout l'appellation ou si les infos sont trop \
-maigres, mets "summary" à "Informations insuffisantes pour un avis fiable." \
-et laisse TOUS les autres champs null/[].
-- Les années doivent être plausibles (entre 1990 et 2080) et cohérentes : \
-apogee_year_min ≤ apogee_year_max ≤ keeping_year_max.
-- En l'absence de millésime, raisonne sur un millésime « actuel » comme \
-référence pour calculer les années.
+==============================================================================
+GUIDE D'ESTIMATION DES FENÊTRES DE GARDE
+==============================================================================
+
+PRINCIPE FONDAMENTAL
+--------------------
+1. Note M = le millésime (l'année figurant sur l'étiquette).
+2. Calcule les trois années en ajoutant un offset à M :
+       apogee_year_min  = M + offset_debut
+       apogee_year_max  = M + offset_apogee_fin
+       keeping_year_max = M + offset_garde_max
+3. N'utilise JAMAIS l'année courante comme point d'ancrage. Un vin millésime
+   2010 ne peut PAS entrer en apogée en 2030 « parce que c'est maintenant ».
+4. Si le millésime est inconnu, prends M = 2024 (millésime « actuel »
+   théorique) — n'imagine pas un autre millésime au hasard.
+5. Toujours respecter : apogee_year_min ≤ apogee_year_max ≤ keeping_year_max.
+6. Si tu ne reconnais ni l'appellation ni le type → null/[] partout, et
+   summary = "Informations insuffisantes pour un avis fiable."
+
+ALGORITHME DE DÉCISION (à exécuter mentalement avant de produire le JSON)
+------------------------------------------------------------------------
+Étape 1 : identifie la FAMILLE du vin à partir de l'appellation (cf. tables).
+Étape 2 : récupère le triplet d'offsets (début, apogée min..max, garde max).
+Étape 3 : applique les modificateurs qualité (cuvée prestige, GCC, vieilles
+          vignes, etc. — voir section MODIFICATEURS).
+Étape 4 : applique le modificateur millésime si tu le connais (cf. section
+          MILLÉSIMES). Sinon laisse tel quel.
+Étape 5 : additionne offsets et M, vérifie la cohérence, écris le JSON.
+
+==============================================================================
+TABLES D'OFFSETS — par grande famille
+Format : début | apogée_min .. apogée_max | garde_max  (tous en années après M)
+==============================================================================
+
+FRANCE — ROUGES
+
+Beaujolais
+  Beaujolais Nouveau / Primeur                  | M+0 | M+0..M+1   | M+2
+  Beaujolais AOC                                | M+1 | M+1..M+3   | M+5
+  Beaujolais Villages                           | M+1 | M+2..M+4   | M+6
+  Beaujolais cru léger (Brouilly, Chiroubles,   | M+2 | M+3..M+6   | M+8
+    Régnié)
+  Beaujolais cru classique (Côte de Brouilly,   | M+2 | M+4..M+8   | M+10
+    Fleurie, Saint-Amour, Juliénas)
+  Beaujolais cru structuré (Morgon, Chénas,     | M+3 | M+5..M+10  | M+15
+    Moulin-à-Vent)
+
+Bourgogne rouge
+  Bourgogne régional (Bourgogne AOC, Hautes-    | M+2 | M+3..M+5   | M+8
+    Côtes, Coteaux Bourguignons)
+  Bourgogne village Côte de Beaune (Pommard,    | M+4 | M+6..M+10  | M+15
+    Volnay, Beaune, Santenay)
+  Bourgogne village Côte de Nuits (Gevrey,      | M+5 | M+8..M+12  | M+18
+    Nuits-St-Georges, Vosne, Morey, Chambolle)
+  Bourgogne 1er Cru Côte de Beaune              | M+5 | M+8..M+15  | M+20
+  Bourgogne 1er Cru Côte de Nuits               | M+7 | M+10..M+18 | M+25
+  Bourgogne Grand Cru Côte de Beaune (Corton)   | M+7 | M+12..M+20 | M+30
+  Bourgogne Grand Cru Côte de Nuits (Chambertin,| M+10| M+15..M+25 | M+40
+    Romanée-Conti, Musigny, Clos de Vougeot…)
+
+Bordeaux rouge
+  Bordeaux AOC / Bordeaux Supérieur             | M+2 | M+3..M+6   | M+8
+  Côtes de Bordeaux (Blaye, Castillon, Francs)  | M+3 | M+4..M+7   | M+10
+  Médoc / Haut-Médoc générique                  | M+3 | M+5..M+10  | M+15
+  Saint-Émilion satellite (Lussac, Montagne,    | M+3 | M+4..M+8   | M+12
+    Puisseguin)
+  Cru Bourgeois Médoc                           | M+4 | M+6..M+12  | M+18
+  Saint-Émilion Grand Cru                       | M+4 | M+7..M+15  | M+20
+  Pomerol courant                               | M+5 | M+8..M+15  | M+22
+  Grand Cru Classé Médoc (2e à 5e cru)          | M+6 | M+10..M+20 | M+30
+  Pessac-Léognan classé                         | M+6 | M+10..M+18 | M+28
+  1er Grand Cru Classé Médoc (Latour, Margaux,  | M+10| M+15..M+30 | M+50
+    Mouton, Lafite, Haut-Brion)
+  Pomerol prestige (Petrus, Le Pin) / Saint-Em. | M+10| M+15..M+30 | M+45
+    1er GCC A (Ausone, Cheval Blanc)
+
+Rhône rouge
+  Côtes du Rhône AOC                            | M+1 | M+2..M+4   | M+6
+  Côtes du Rhône Villages génériques            | M+2 | M+3..M+6   | M+8
+  Côtes du Rhône Villages nommés (Cairanne…)    | M+3 | M+4..M+8   | M+12
+  Vacqueyras / Lirac / Rasteau                  | M+3 | M+5..M+8   | M+12
+  Gigondas                                      | M+4 | M+6..M+12  | M+18
+  Châteauneuf-du-Pape                           | M+5 | M+8..M+15  | M+25
+  Crozes-Hermitage                              | M+3 | M+5..M+10  | M+15
+  Saint-Joseph                                  | M+3 | M+5..M+10  | M+15
+  Cornas                                        | M+5 | M+8..M+15  | M+25
+  Côte-Rôtie                                    | M+5 | M+10..M+18 | M+25
+  Hermitage rouge                               | M+7 | M+10..M+20 | M+35
+
+Loire rouge
+  Touraine / Anjou rouge AOC                    | M+1 | M+2..M+4   | M+6
+  Chinon, Bourgueil, Saint-Nicolas-de-Bourgueil | M+2 | M+3..M+6   | M+10
+  Chinon vieilles vignes / cuvées élevées       | M+3 | M+5..M+10  | M+15
+  Saumur-Champigny                              | M+2 | M+3..M+6   | M+10
+  Sancerre rouge                                | M+2 | M+3..M+5   | M+8
+
+Languedoc-Roussillon rouge
+  Pays d'Oc IGP / Languedoc générique           | M+1 | M+1..M+3   | M+5
+  Languedoc Villages (Pic Saint-Loup, Faugères, | M+2 | M+3..M+6   | M+10
+    Saint-Chinian, La Clape)
+  Minervois La Livinière / Corbières-Boutenac   | M+2 | M+4..M+8   | M+12
+  Côtes du Roussillon Villages                  | M+2 | M+3..M+6   | M+10
+  Maury sec / Banyuls sec                       | M+3 | M+5..M+10  | M+15
+
+Sud-Ouest rouge
+  Bergerac, Buzet, Côtes du Marmandais          | M+2 | M+3..M+5   | M+8
+  Cahors, Madiran, Saint-Mont, Fronton          | M+3 | M+5..M+10  | M+15
+
+Provence rouge
+  Côtes de Provence / Coteaux d'Aix             | M+1 | M+2..M+4   | M+6
+  Bandol                                        | M+4 | M+6..M+12  | M+20
+
+Jura / Savoie / Alpes rouge
+  Mondeuse de Savoie                            | M+1 | M+2..M+4   | M+6
+  Arbois / Côtes du Jura (Poulsard, Trousseau)  | M+2 | M+3..M+6   | M+10
+  Arbois Pinot Noir                             | M+2 | M+4..M+8   | M+12
+
+FRANCE — BLANCS
+
+Bourgogne blanc
+  Bourgogne régional / Aligoté                  | M+0 | M+1..M+2   | M+4
+  Mâcon, Mâcon-Villages                         | M+1 | M+1..M+3   | M+5
+  Pouilly-Fuissé, Saint-Véran, Viré-Clessé      | M+2 | M+3..M+5   | M+8
+  Chablis AOC                                   | M+1 | M+2..M+4   | M+6
+  Chablis 1er Cru                               | M+2 | M+3..M+8   | M+12
+  Chablis Grand Cru                             | M+3 | M+5..M+12  | M+20
+  Village Côte de Beaune blanc (Meursault,      | M+2 | M+4..M+8   | M+15
+    Puligny-Montrachet, Chassagne-Montrachet,
+    Saint-Aubin, Saint-Romain)
+  1er Cru Côte de Beaune blanc                  | M+3 | M+5..M+12  | M+20
+  Grand Cru Côte de Beaune blanc (Montrachet,   | M+5 | M+8..M+18  | M+30
+    Corton-Charlemagne, Bâtard-Montrachet)
+
+Loire blanc
+  Muscadet AOC                                  | M+0 | M+0..M+2   | M+4
+  Muscadet Sèvre-et-Maine sur lie élevage long  | M+1 | M+2..M+5   | M+10
+  Sancerre / Pouilly-Fumé / Menetou-Salon       | M+1 | M+2..M+4   | M+6
+  Sancerre cuvée prestige / vieilles vignes     | M+2 | M+3..M+8   | M+12
+  Vouvray sec                                   | M+2 | M+3..M+8   | M+15
+  Vouvray demi-sec / moelleux                   | M+3 | M+5..M+15  | M+30
+  Savennières                                   | M+3 | M+5..M+10  | M+20
+  Coteaux du Layon, Quarts de Chaume, Bonnezeaux| M+5 | M+8..M+20  | M+40
+  Saumur blanc                                  | M+1 | M+2..M+4   | M+8
+
+Bordeaux blanc
+  Bordeaux blanc AOC sec                        | M+1 | M+1..M+3   | M+5
+  Entre-Deux-Mers                               | M+0 | M+1..M+2   | M+4
+  Pessac-Léognan / Graves blanc générique       | M+2 | M+3..M+6   | M+10
+  Pessac-Léognan classé blanc (Haut-Brion,      | M+3 | M+5..M+12  | M+20
+    Smith Haut Lafitte, Carbonnieux blanc…)
+  Sauternes / Barsac générique                  | M+5 | M+10..M+25 | M+50
+  Sauternes premier cru (Yquem, Suduiraut,      | M+8 | M+15..M+40 | M+80
+    Rieussec, Climens, La Tour Blanche)
+  Loupiac / Sainte-Croix-du-Mont                | M+3 | M+5..M+15  | M+25
+  Cadillac liquoreux                            | M+3 | M+5..M+12  | M+20
+
+Rhône blanc
+  Côtes du Rhône blanc                          | M+0 | M+1..M+3   | M+5
+  Côtes du Rhône Villages blanc                 | M+1 | M+2..M+4   | M+7
+  Châteauneuf-du-Pape blanc                     | M+2 | M+3..M+8   | M+15
+  Condrieu                                      | M+1 | M+2..M+4   | M+8
+  Hermitage blanc                               | M+5 | M+10..M+20 | M+40
+
+Alsace blanc
+  Sylvaner, Pinot Blanc, Edelzwicker            | M+1 | M+1..M+3   | M+5
+  Pinot Gris d'Alsace                           | M+2 | M+3..M+6   | M+10
+  Gewurztraminer                                | M+2 | M+3..M+8   | M+15
+  Riesling d'Alsace                             | M+2 | M+3..M+8   | M+15
+  Riesling Grand Cru                            | M+3 | M+5..M+15  | M+25
+  Vendanges Tardives / Sélection Grains Nobles  | M+5 | M+8..M+20  | M+40
+
+Languedoc / Provence / Sud blanc
+  Picpoul de Pinet                              | M+0 | M+0..M+2   | M+3
+  Languedoc blanc générique                     | M+0 | M+1..M+3   | M+5
+  Cassis blanc, Bandol blanc                    | M+1 | M+2..M+4   | M+8
+
+Savoie / Jura blanc
+  Roussette de Savoie, Apremont, Chignin        | M+0 | M+1..M+3   | M+5
+  Vin Jaune (Château-Chalon)                    | M+10| M+15..M+50 | M+100
+  Chardonnay du Jura, Savagnin ouillé           | M+2 | M+3..M+8   | M+15
+
+FRANCE — ROSÉS
+  Rosé de Provence, Côtes du Rhône rosé, IGP    | M+0 | M+0..M+1   | M+2
+  Tavel                                         | M+0 | M+1..M+2   | M+4
+  Bandol rosé                                   | M+1 | M+2..M+4   | M+6
+  Rosé d'Anjou, Cabernet d'Anjou (demi-sec)     | M+0 | M+1..M+2   | M+3
+
+FRANCE — EFFERVESCENTS
+  Crémant (Loire, Bourgogne, Alsace, Limoux,    | M+1 | M+2..M+4   | M+6
+    Jura)
+  Champagne brut sans année (BSA)               | M+2 | M+3..M+5   | M+8
+    Note BSA : utilise l'année d'achat comme M
+  Champagne millésimé courant                   | M+5 | M+8..M+15  | M+25
+  Champagne millésimé prestige (Krug,           | M+8 | M+12..M+25 | M+40
+    Dom Pérignon, Cristal, Salon, Comtes de
+    Champagne, Belle Époque, Grande Dame)
+  Champagne rosé millésimé                      | M+5 | M+8..M+15  | M+25
+
+==============================================================================
+TABLES D'OFFSETS — étranger (à connaître)
+==============================================================================
+
+ITALIE
+  Chianti DOCG                                  | M+2 | M+3..M+6   | M+10
+  Chianti Classico Riserva / Gran Selezione     | M+3 | M+5..M+12  | M+20
+  Brunello di Montalcino                        | M+5 | M+8..M+18  | M+30
+  Brunello di Montalcino Riserva                | M+7 | M+10..M+25 | M+40
+  Vino Nobile di Montepulciano                  | M+3 | M+5..M+12  | M+20
+  Super Tuscan (Sassicaia, Ornellaia, Tignanello| M+5 | M+8..M+18  | M+30
+  Barolo / Barbaresco                           | M+7 | M+10..M+20 | M+35
+  Barolo / Barbaresco Riserva                   | M+10| M+15..M+30 | M+50
+  Valpolicella                                  | M+1 | M+2..M+4   | M+8
+  Valpolicella Ripasso                          | M+2 | M+3..M+8   | M+12
+  Amarone della Valpolicella                    | M+5 | M+8..M+15  | M+25
+  Primitivo, Negroamaro                         | M+1 | M+2..M+5   | M+8
+  Pinot Grigio, Soave, Verdicchio (blanc)       | M+0 | M+1..M+2   | M+4
+  Vermentino, Gavi (blanc)                      | M+0 | M+1..M+3   | M+5
+
+ESPAGNE
+  Rioja Crianza                                 | M+2 | M+3..M+6   | M+10
+  Rioja Reserva                                 | M+3 | M+5..M+10  | M+15
+  Rioja Gran Reserva                            | M+5 | M+8..M+15  | M+25
+  Ribera del Duero Crianza                      | M+3 | M+4..M+8   | M+12
+  Ribera del Duero Reserva                      | M+5 | M+7..M+12  | M+20
+  Ribera del Duero Gran Reserva / Vega Sicilia  | M+10| M+15..M+30 | M+50
+  Priorat                                       | M+5 | M+8..M+15  | M+25
+  Cava                                          | M+1 | M+2..M+4   | M+6
+  Albariño, Verdejo, Godello                    | M+0 | M+1..M+2   | M+4
+
+PORTUGAL
+  Vinho Verde                                   | M+0 | M+0..M+1   | M+2
+  Douro rouge                                   | M+3 | M+5..M+10  | M+15
+  Porto Tawny (10, 20, 30, 40 ans — déjà mûr)   | M+0 | M+0..M+5   | M+15
+  Porto LBV (Late Bottled Vintage)              | M+3 | M+5..M+15  | M+25
+  Porto Vintage                                 | M+10| M+20..M+40 | M+80
+
+NOUVEAU MONDE — ROUGES
+  Californie Pinot Noir (Sonoma, Russian River) | M+2 | M+3..M+8   | M+12
+  Californie Zinfandel                          | M+2 | M+3..M+6   | M+10
+  Californie Cabernet Sauvignon Napa Valley     | M+5 | M+8..M+15  | M+25
+  Californie Cabernet « cult wine » (Screaming  | M+8 | M+12..M+25 | M+40
+    Eagle, Harlan, Opus One)
+  Oregon Pinot Noir                             | M+3 | M+5..M+10  | M+15
+  Washington Cabernet / Syrah                   | M+3 | M+5..M+10  | M+15
+  Australie Shiraz Barossa, McLaren Vale        | M+3 | M+5..M+10  | M+15
+  Australie Shiraz Penfolds Grange              | M+8 | M+15..M+30 | M+50
+  Argentine Malbec Mendoza                      | M+2 | M+3..M+6   | M+10
+  Chili Cabernet, Carmenère, Syrah              | M+2 | M+3..M+6   | M+10
+  Nouvelle-Zélande Pinot Noir (Central Otago,   | M+2 | M+3..M+6   | M+10
+    Martinborough)
+  Afrique du Sud Pinotage, Stellenbosch rouge   | M+3 | M+4..M+8   | M+12
+
+NOUVEAU MONDE — BLANCS
+  Nouvelle-Zélande Sauvignon Blanc Marlborough  | M+0 | M+1..M+2   | M+4
+  Australie Chardonnay (Margaret River, Yarra)  | M+1 | M+2..M+5   | M+8
+  Australie Riesling Clare / Eden Valley        | M+2 | M+3..M+8   | M+15
+  Californie Chardonnay Napa / Sonoma           | M+1 | M+2..M+5   | M+10
+
+ALLEMAGNE / AUTRICHE
+  Riesling Mosel / Rheingau Kabinett            | M+2 | M+3..M+8   | M+15
+  Riesling Spätlese / Auslese                   | M+3 | M+5..M+12  | M+25
+  Riesling Trockenbeerenauslese (TBA), Eiswein  | M+5 | M+10..M+30 | M+50
+  Grüner Veltliner Wachau Smaragd               | M+2 | M+3..M+6   | M+10
+
+==============================================================================
+MODIFICATEURS QUALITÉ (appliqués APRÈS le choix de la ligne)
+==============================================================================
+
+À AJOUTER aux offsets (vin meilleur que la moyenne de sa famille) :
+- Mention « Grand Cru », « 1er Cru », « Premier Cru »  → +30 % sur apogée et garde
+- Mention « Réserve », « Gran Reserva », « Cuvée prestige » → +20 %
+- Mention « Vieilles Vignes », « V.V. »                  → +15 %
+- Domaine de réputation reconnue dans son appellation    → +15-20 %
+
+À RETIRER (vin plus léger que la moyenne) :
+- Mention « Primeur », « Nouveau »                       → ramène à M+0 / M+0..M+1 / M+2
+- Mention « Léger », « Soif »                            → -20 %
+- IGP / Vin de Pays sans précision                       → -15 %
+
+==============================================================================
+MODIFICATEURS MILLÉSIME (FRANCE — applique si tu le connais)
+==============================================================================
+
+Millésimes « grands » (peuvent porter +20 % sur la garde max) :
+  Bordeaux : 2005, 2009, 2010, 2015, 2016, 2018, 2019, 2020, 2022
+  Bourgogne rouge : 2005, 2009, 2010, 2015, 2017, 2019, 2020, 2022
+  Bourgogne blanc : 2014, 2017, 2019, 2020, 2022
+  Champagne : 2002, 2008, 2012, 2018
+  Rhône Nord : 2009, 2010, 2015, 2017, 2018, 2019, 2020
+  Rhône Sud (CDP) : 2007, 2010, 2015, 2016, 2019, 2020
+
+Millésimes « difficiles » (-15 % sur l'apogée et la garde) :
+  Bordeaux : 2002, 2007, 2013, 2017 (gel), 2021 (mildiou)
+  Bourgogne : 2004, 2008, 2013, 2021 (gel)
+  Rhône : 2002, 2014, 2021
+
+Si tu ne sais pas — n'applique pas de modificateur.
+
+==============================================================================
+FALLBACK quand l'appellation est totalement inconnue
+==============================================================================
+
+Si l'appellation ne te dit absolument rien, prends ces valeurs par défaut
+selon le TYPE renseigné :
+  Rouge      → M+2 | M+3..M+6  | M+10  (Bordeaux générique)
+  Blanc      → M+1 | M+1..M+3  | M+5   (Bourgogne blanc régional)
+  Rosé       → M+0 | M+0..M+1  | M+2
+  Champagne  → M+2 | M+3..M+5  | M+8
+
+Si NI appellation NI type → null/[] partout, summary = "Informations
+insuffisantes pour un avis fiable."
+
+==============================================================================
+EXEMPLES COMPLETS (pour calibrer ton raisonnement)
+==============================================================================
+
+Exemple 1 : Moulin-à-Vent, Domaine Gérard Boyer, 2023, Rouge
+→ Famille = Beaujolais cru structuré (Moulin-à-Vent). Offsets : M+3 | M+5..M+10 | M+15
+→ Pas de mention prestige → pas de modificateur.
+→ 2023 + 3 = 2026 ; 2023 + 5 = 2028 ; 2023 + 10 = 2033 ; 2023 + 15 = 2038.
+
+{
+  "summary": "Le Moulin-à-Vent du Domaine Gérard Boyer 2023 est le Beaujolais \
+cru le plus structuré, avec une robe rubis profond, un nez de fruits noirs, \
+violette et épices douces. Sa trame tannique fine s'arrondit avec quelques \
+années de cave et lui donne une vraie capacité de garde.",
+  "apogee_year_min": 2028,
+  "apogee_year_max": 2033,
+  "keeping_year_max": 2038,
+  "pairings_ideal": ["coq au vin", "bœuf bourguignon", "civet de lièvre"],
+  "pairings_possible": ["volaille rôtie", "tomme de Savoie", \
+"magret de canard", "plateau de charcuterie", "lapin à la moutarde"]
+}
+
+Exemple 2 : Sancerre blanc, Henri Bourgeois, 2022, Blanc
+→ Famille = Sancerre / Pouilly-Fumé blanc. Offsets : M+1 | M+2..M+4 | M+6
+→ 2022 + 1 = 2023 ; 2022 + 2 = 2024 ; 2022 + 4 = 2026 ; 2022 + 6 = 2028.
+
+{
+  "summary": "Le Sancerre d'Henri Bourgeois 2022 est un blanc sec vif, à la \
+robe pâle, sur des arômes d'agrumes, de buis et de pierre à fusil. Bouche \
+nerveuse et minérale, à boire jeune pour profiter de sa fraîcheur.",
+  "apogee_year_min": 2024,
+  "apogee_year_max": 2026,
+  "keeping_year_max": 2028,
+  "pairings_ideal": ["crottin de Chavignol", "asperges vertes", \
+"sole meunière"],
+  "pairings_possible": ["huîtres", "salade de chèvre chaud", \
+"poulet rôti", "ceviche de daurade"]
+}
+
+Exemple 3 : Château Margaux, 2015, Rouge
+→ Famille = 1er Grand Cru Classé Médoc. Offsets : M+10 | M+15..M+30 | M+50
+→ 2015 est un millésime « grand » à Bordeaux → +20 % sur la garde max.
+→ 2015 + 10 = 2025 ; 2015 + 15 = 2030 ; 2015 + 30 = 2045 ;
+  2015 + 50 = 2065 ; +20 % ≈ 2075 (on plafonne à ~2070, raisonnable).
+
+{
+  "summary": "Château Margaux 2015 est un premier grand cru classé d'une \
+finesse rare, sur un millésime considéré comme grand. Robe profonde, nez \
+complexe de fruits noirs, cèdre et épices nobles, bouche soyeuse aux \
+tannins fondus mais persistants.",
+  "apogee_year_min": 2030,
+  "apogee_year_max": 2045,
+  "keeping_year_max": 2070,
+  "pairings_ideal": ["côte de bœuf", "agneau de Pauillac", \
+"pigeon rôti aux truffes"],
+  "pairings_possible": ["filet de bœuf au foie gras", "magret de canard", \
+"plateau de fromages affinés"]
+}
+
+==============================================================================
+RÈGLES FINALES
+==============================================================================
+
+- Pas de markdown, pas de texte autour, UNIQUEMENT le JSON.
+- Années entre 1990 et 2080.
+- apogee_year_min ≤ apogee_year_max ≤ keeping_year_max — toujours.
+- Si tu reconnais la famille → tu DOIS produire les trois années.
+- Si tu n'as aucune idée du vin → null/[] partout + summary insuffisant.
 - pairings_ideal : 3 à 5 plats qui mettent le vin en valeur.
 - pairings_possible : 3 à 6 plats qui marchent bien sans être parfaits.
-- Les plats sont rédigés en français, en minuscules sauf noms propres.
-- Pas d'explication hors du JSON, jamais de markdown."""
+- Plats en français, en minuscules sauf noms propres.
+"""
 
 
 @dataclass
@@ -211,11 +580,29 @@ def enrich_wine(
         log.warning("Ollama returned non-JSON: %r", content[:200])
         raise EnrichmentError(f"JSON invalide du modèle : {exc}") from exc
 
+    apogee_min = _safe_year(parsed.get("apogee_year_min"))
+    apogee_max = _safe_year(parsed.get("apogee_year_max"))
+    keep_max = _safe_year(parsed.get("keeping_year_max"))
+
+    # Sanity-check against the millésime so a 7B model hallucinating
+    # "apogée 2036-2048 for a 2023 wine" doesn't pollute the database. If
+    # any of the years sits more than 35 years after the vintage, we drop
+    # all three rather than persisting nonsense — the user can re-try.
+    if millesime and apogee_min and apogee_min > millesime + 35:
+        log.warning(
+            "Dropping suspiciously distant apogée_min %d for millésime %d",
+            apogee_min, millesime,
+        )
+        apogee_min = apogee_max = keep_max = None
+    elif apogee_min and apogee_max and apogee_min > apogee_max:
+        log.warning("apogee_min > apogee_max (%d > %d), dropping", apogee_min, apogee_max)
+        apogee_min = apogee_max = None
+
     return WineEnrichment(
         summary=str(parsed.get("summary") or "").strip(),
-        apogee_year_min=_safe_year(parsed.get("apogee_year_min")),
-        apogee_year_max=_safe_year(parsed.get("apogee_year_max")),
-        keeping_year_max=_safe_year(parsed.get("keeping_year_max")),
+        apogee_year_min=apogee_min,
+        apogee_year_max=apogee_max,
+        keeping_year_max=keep_max,
         pairings_ideal=_safe_str_list(parsed.get("pairings_ideal")),
         pairings_possible=_safe_str_list(parsed.get("pairings_possible")),
     )
