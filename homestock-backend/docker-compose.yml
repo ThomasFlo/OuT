@@ -37,11 +37,15 @@ services:
     networks:
       - homestock-net
 
-  # Local LLM for wine enrichment (replaces the previous Anthropic dependency).
-  # Default model is Mistral 7B Instruct: ~4.5 GB on disk, ~5 GB RAM during
-  # inference, 10–25 s per call on CPU after warm-up. Trained heavily on
-  # French, which gives noticeably better sommelier output than 3B options.
-  # Drop to OLLAMA_MODEL=llama3.2:3b on a smaller NAS (~2 GB).
+  # Local LLM for wine enrichment.
+  # Default model is Llama 3.2 3B Instruct: ~2 GB on disk, ~2.5 GB RAM during
+  # inference (KV cache included), 3-5 s per call on CPU after warm-up.
+  # Picked over Mistral 7B for the 8 GB-RAM-NAS use case: Mistral OOM-kills
+  # mid-inference when the big sommelier prompt (~6 k tokens) inflates the
+  # KV cache past the 8 GB ceiling. Llama 3.2 also has a 128 k native
+  # context so the guide fits with plenty of headroom.
+  # Bump to OLLAMA_MODEL=mistral:7b-instruct on a 12+ GB NAS for richer
+  # French sommelier output, or qwen2.5:14b on a 16+ GB NAS.
   homestock-ollama:
     image: ollama/ollama:latest
     container_name: homestock-ollama
@@ -49,7 +53,7 @@ services:
     volumes:
       - homestock-ollama-models:/root/.ollama
     environment:
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b-instruct}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
     entrypoint: /bin/sh
     command:
       - -c
@@ -92,7 +96,7 @@ services:
       # Local LLM used by the wine enrichment endpoint. Leave OLLAMA_BASE_URL
       # blank to disable enrichment entirely (the endpoint will return 503).
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://homestock-ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b-instruct}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
     ports:
       - "${API_PORT:-8080}:8000"
     volumes:
