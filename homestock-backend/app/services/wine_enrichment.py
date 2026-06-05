@@ -517,8 +517,16 @@ def enrich_wine(
         "format": "json",
         "stream": False,
         # Low temperature: we want stable, factual sommelier output, not
-        # creative writing.
-        "options": {"temperature": 0.2},
+        # creative writing. num_ctx must hold the ~6k-token system prompt
+        # plus user message plus headroom for the JSON answer — Ollama's
+        # default is 2048 which would silently truncate the guide and
+        # make Mistral hallucinate. num_predict caps the answer length
+        # so a runaway generation can't hang the request.
+        "options": {
+            "temperature": 0.2,
+            "num_ctx": 8192,
+            "num_predict": 800,
+        },
     }
 
     log.info("Calling Ollama at %s with model %s", base_url, model)
