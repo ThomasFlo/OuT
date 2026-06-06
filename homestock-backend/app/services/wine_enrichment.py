@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -251,16 +252,71 @@ async def enrich_wine(
     millesime: int | None,
     type_: str | None,
 ) -> WineEnrichment:
-    """Async call to Ollama.
+    """Non-streaming variant kept for tests / fallback callers.
 
-    Async on purpose: an Ollama inference can take 60-180 s on a CPU NAS,
-    and our wine enrichment is the only endpoint that calls it. If we ran
-    sync, FastAPI would tie up a worker thread for the full duration and
-    the API's accept queue could overflow under burst clicks, dropping
-    new TCP connections silently (manifests as "failed to connect after
-    15000ms" on Android even though no network is broken). Running the
-    httpx call on the asyncio event loop frees up workers and keeps the
-    accept loop responsive."""
+    Internally consumes the streaming generator and returns only the final
+    parsed result; UI callers should prefer enrich_wine_stream() so the
+    user sees the model typing the summary instead of staring at a frozen
+    dialog for 60-90 s.
+    """
+    final: WineEnrichment | None = None
+    async for event in enrich_wine_stream(
+        appellation=appellation, domaine=domaine,
+        millesime=millesime, type_=type_,
+    ):
+        if event.get("type") == "done":
+            final = event["enrichment"]
+    if final is None:
+        raise EnrichmentError("Stream a terminé sans résultat.")
+    return final
+
+
+def _extract_partial_summary(accumulated: str) -> str | None:
+    """Best-effort extraction of the 'summary' value from a partial JSON.
+
+    Llama emits the JSON character by character. We can't parse it as a
+    document until the closing brace lands, but we can recognise the
+    "summary":"..." prefix and stream its growing inner value so the user
+    sees the sommelier sentence being typed. Returns None until the field
+    appears, then keeps returning the partial (or finished) inner text.
+    """
+    m = re.search(r'"summary"\s*:\s*"', accumulated)
+    if not m:
+        return None
+    rest = accumulated[m.end():]
+    out = []
+    i = 0
+    while i < len(rest):
+        c = rest[i]
+        if c == "\\" and i + 1 < len(rest):
+            # JSON escape: pass the escaped char through (\n, \", etc.)
+            esc = rest[i + 1]
+            out.append({"n": "\n", "t": "\t", '"': '"', "\\": "\\"}.get(esc, esc))
+            i += 2
+            continue
+        if c == '"':
+            return "".join(out)  # closing quote — summary complete
+        out.append(c)
+        i += 1
+    return "".join(out)  # still streaming
+
+
+async def enrich_wine_stream(
+    *,
+    appellation: str | None,
+    domaine: str | None,
+    millesime: int | None,
+    type_: str | None,
+):
+    """Stream Llama's response, yielding progress events.
+
+    Yields dicts with these shapes:
+      {"type": "summary", "text": "Le Moulin-à-Vent..."}
+        — partial summary text, sent every time it grows
+      {"type": "done", "enrichment": WineEnrichment(...)}
+        — terminal event with the parsed/sanity-checked result
+    Exceptions propagate to the caller as before.
+    """
     base_url = _ollama_url()
     if not base_url:
         raise EnrichmentDisabled(
@@ -269,10 +325,8 @@ async def enrich_wine(
 
     model = _model_name()
     user_prompt = _build_user_prompt(
-        appellation=appellation,
-        domaine=domaine,
-        millesime=millesime,
-        type_=type_,
+        appellation=appellation, domaine=domaine,
+        millesime=millesime, type_=type_,
     )
     payload = {
         "model": model,
@@ -280,16 +334,8 @@ async def enrich_wine(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        # Forces the model to emit a well-formed JSON document — Ollama
-        # uses grammar-constrained decoding under the hood.
         "format": "json",
-        "stream": False,
-        # Low temperature for stable factual output. num_ctx is sized to
-        # hold the ~2.1k-token system prompt + small user prompt + the
-        # ~500-token JSON answer, with a bit of headroom. Smaller num_ctx
-        # = smaller KV cache = much faster prompt eval on a CPU NAS.
-        # num_predict caps the answer length so a runaway generation
-        # can't hang the request.
+        "stream": True,  # streamed
         "options": {
             "temperature": 0.2,
             "num_ctx": 4096,
@@ -297,14 +343,45 @@ async def enrich_wine(
         },
     }
 
-    log.info("Calling Ollama at %s with model %s", base_url, model)
+    log.info("Streaming Ollama at %s with model %s", base_url, model)
+    accumulated: list[str] = []
+    last_summary: str | None = None
+
     try:
-        # Split timeouts: connection should be fast (LAN), but reads can
-        # be slow on a cold-start inference.
         timeout = httpx.Timeout(connect=10.0, read=CALL_TIMEOUT_SECONDS,
                                 write=10.0, pool=10.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(f"{base_url}/api/chat", json=payload)
+            async with client.stream("POST", f"{base_url}/api/chat",
+                                     json=payload) as resp:
+                if resp.status_code == 404:
+                    raise EnrichmentError(
+                        f"Modèle « {model} » indisponible sur Ollama. "
+                        f"Lance « docker exec homestock-ollama ollama "
+                        f"pull {model} »."
+                    )
+                if resp.status_code >= 400:
+                    text = await resp.aread()
+                    raise EnrichmentError(
+                        f"Ollama a renvoyé {resp.status_code} : "
+                        f"{text[:200].decode('utf-8', 'replace')}"
+                    )
+
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    token = (chunk.get("message") or {}).get("content", "")
+                    if token:
+                        accumulated.append(token)
+                        summary = _extract_partial_summary("".join(accumulated))
+                        if summary is not None and summary != last_summary:
+                            last_summary = summary
+                            yield {"type": "summary", "text": summary}
+                    if chunk.get("done"):
+                        break
     except httpx.ConnectError as exc:
         raise EnrichmentError(
             "Ollama injoignable. Vérifie que le conteneur homestock-ollama "
@@ -315,36 +392,18 @@ async def enrich_wine(
             f"Ollama n'a pas répondu en {int(CALL_TIMEOUT_SECONDS)}s. "
             "Le premier appel sur un modèle froid évalue tout le guide "
             "sommelier et peut être lent ; réessaie une seconde fois "
-            "(le cache d'Ollama divise le temps par 5-10). "
-            "Si ça persiste, ton CPU est trop juste pour ce modèle — "
-            "raccourcis le prompt ou réduis num_ctx."
+            "(le cache d'Ollama divise le temps par 5-10). Si ça persiste, "
+            "ton CPU est trop juste pour ce modèle — raccourcis le prompt "
+            "ou réduis num_ctx."
         ) from exc
     except httpx.HTTPError as exc:
         log.exception("Ollama call failed")
         raise EnrichmentError(f"Appel LLM échoué : {exc}") from exc
 
-    if resp.status_code == 404:
-        # Most likely "model not found" — surface a helpful hint.
-        raise EnrichmentError(
-            f"Modèle « {model} » indisponible sur Ollama. "
-            f"Lance « docker exec homestock-ollama ollama pull {model} »."
-        )
-    if resp.status_code >= 400:
-        raise EnrichmentError(
-            f"Ollama a renvoyé {resp.status_code} : {resp.text[:200]}"
-        )
-
-    try:
-        body = resp.json()
-    except json.JSONDecodeError as exc:
-        raise EnrichmentError(f"Réponse Ollama invalide : {exc}") from exc
-
-    content = (body.get("message") or {}).get("content", "").strip()
+    content = "".join(accumulated).strip()
     if not content:
         raise EnrichmentError("Réponse vide d'Ollama.")
 
-    # The `format: "json"` mode should guarantee valid JSON, but small
-    # models occasionally wrap it in ``` fences — strip them defensively.
     if content.startswith("```"):
         content = content.strip("`")
         if content.lower().startswith("json"):
@@ -359,11 +418,6 @@ async def enrich_wine(
     apogee_min = _safe_year(parsed.get("apogee_year_min"))
     apogee_max = _safe_year(parsed.get("apogee_year_max"))
     keep_max = _safe_year(parsed.get("keeping_year_max"))
-
-    # Sanity-check against the millésime so a 7B model hallucinating
-    # "apogée 2036-2048 for a 2023 wine" doesn't pollute the database. If
-    # any of the years sits more than 35 years after the vintage, we drop
-    # all three rather than persisting nonsense — the user can re-try.
     if millesime and apogee_min and apogee_min > millesime + 35:
         log.warning(
             "Dropping suspiciously distant apogée_min %d for millésime %d",
@@ -371,10 +425,11 @@ async def enrich_wine(
         )
         apogee_min = apogee_max = keep_max = None
     elif apogee_min and apogee_max and apogee_min > apogee_max:
-        log.warning("apogee_min > apogee_max (%d > %d), dropping", apogee_min, apogee_max)
+        log.warning("apogee_min > apogee_max (%d > %d), dropping",
+                    apogee_min, apogee_max)
         apogee_min = apogee_max = None
 
-    return WineEnrichment(
+    enrichment = WineEnrichment(
         summary=str(parsed.get("summary") or "").strip(),
         apogee_year_min=apogee_min,
         apogee_year_max=apogee_max,
@@ -382,8 +437,7 @@ async def enrich_wine(
         pairings_ideal=_safe_str_list(parsed.get("pairings_ideal")),
         pairings_possible=_safe_str_list(parsed.get("pairings_possible")),
     )
-
-
+    yield {"type": "done", "enrichment": enrichment}
 def _safe_year(v) -> int | None:
     if v is None:
         return None

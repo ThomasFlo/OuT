@@ -38,6 +38,7 @@ class HomeStockRepository @Inject constructor(
     private val objetDao: ObjetDao,
     private val realtime: RealtimeClient,
     private val host: HostSelectionInterceptor,
+    private val gson: com.google.gson.Gson,
     private val scope: CoroutineScope,
 ) {
     val connected: StateFlow<Boolean> get() = realtime.connected
@@ -336,6 +337,34 @@ class HomeStockRepository @Inject constructor(
         val obj = api.enrichWine(objetServerId)
         return obj.vin
     }
+
+    /**
+     * Stream events from /vins/{id}/enrich/stream. The returned Flow emits
+     * one [com.homestock.data.remote.WineEnrichEvent] per server event:
+     * progressive summary text while Llama generates, then the final
+     * [com.homestock.data.remote.WineEnrichEvent.Done] with the persisted
+     * VinDto, or [com.homestock.data.remote.WineEnrichEvent.Failed] on
+     * error. The reader uses BufferedSource so we get each line as soon as
+     * the server flushes it.
+     */
+    fun enrichWineStream(objetServerId: Long): kotlinx.coroutines.flow.Flow<com.homestock.data.remote.WineEnrichEvent> =
+        kotlinx.coroutines.flow.flow {
+            val body = api.enrichWineStream(objetServerId)
+            try {
+                val source = body.source()
+                while (true) {
+                    val line = source.readUtf8Line() ?: break
+                    if (line.isBlank()) continue
+                    val event = com.homestock.data.remote.parseWineEnrichEvent(line, gson)
+                    if (event != null) emit(event)
+                    if (event is com.homestock.data.remote.WineEnrichEvent.Done ||
+                        event is com.homestock.data.remote.WineEnrichEvent.Failed
+                    ) break
+                }
+            } finally {
+                runCatching { body.close() }
+            }
+        }.flowOn(kotlinx.coroutines.Dispatchers.IO)
 
     /** Fetch the latest server VinDto for one objet (used by the wine fiche). */
     suspend fun fetchVinDto(objetServerId: Long): com.homestock.data.remote.dto.VinDto? =
