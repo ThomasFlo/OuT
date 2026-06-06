@@ -51,9 +51,15 @@ object AppModule {
         return OkHttpClient.Builder()
             .addInterceptor(host)
             .addInterceptor(logging)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.MINUTES)
-            .writeTimeout(5, TimeUnit.MINUTES)
+            // OkHttp defaults to a 10 s read timeout, which kills slow
+            // endpoints from underneath us. Wine enrichment via Ollama on
+            // a cold model can take 60-120 s (prompt eval + generation),
+            // and the server itself only gives up at 180 s, so the client
+            // must wait longer. 200 s leaves a small buffer over server.
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(200, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(210, TimeUnit.SECONDS)
             .build()
     }
 
