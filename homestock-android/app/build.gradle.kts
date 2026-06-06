@@ -15,7 +15,7 @@ android {
         targetSdk = 34
         // Bump versionCode on every release that ships an APK so the
         // in-app updater picks it up. versionName is purely cosmetic.
-        versionCode = 18
+        versionCode = 19
         versionName = "1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
