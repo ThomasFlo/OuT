@@ -165,6 +165,7 @@ fun ObjetDetailScreen(
                     bouteilles = objet.vinNombreBouteilles,
                     enrichment = state.vinEnrichment,
                     enriching = state.enriching,
+                    streamingSummary = state.streamingSummary,
                     onOpenBottle = { confirmHaptic(); viewModel.openBottle() },
                     onEnrich = { viewModel.enrichWine() },
                 )
@@ -379,6 +380,7 @@ private fun WineCard(
     bouteilles: Int?,
     enrichment: com.homestock.data.remote.dto.VinDto?,
     enriching: Boolean,
+    streamingSummary: String?,
     onOpenBottle: () -> Unit,
     onEnrich: () -> Unit,
 ) {
@@ -398,6 +400,17 @@ private fun WineCard(
             millesime?.let { DetailRow("Millésime", it.toString()) }
             type?.takeIf { it.isNotBlank() }?.let { DetailRow("Type", it) }
             bouteilles?.let { DetailRow("Bouteilles restantes", it.toString()) }
+
+            // While analysing, show the sommelier sentence as Llama types it.
+            // The blinking cursor "▍" gives a visible "currently typing" cue.
+            if (enriching && !streamingSummary.isNullOrBlank()) {
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    "$streamingSummary▍",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
 
             enrichment?.let { e ->
                 e.enrichmentSummary?.takeIf { it.isNotBlank() }?.let {

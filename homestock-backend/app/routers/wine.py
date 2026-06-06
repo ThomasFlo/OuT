@@ -1,7 +1,9 @@
 """Cave à vins endpoints: listing, stats, enrichment and 'open a bottle'."""
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -12,6 +14,7 @@ from ..services.wine_enrichment import (
     EnrichmentDisabled,
     EnrichmentError,
     enrich_wine,
+    enrich_wine_stream,
     MODEL as ENRICHMENT_MODEL,
 )
 
@@ -101,6 +104,93 @@ async def enrich_vin(objet_id: int, db: Session = Depends(get_db)):
     db.refresh(obj)
     broadcast_sync("objet", "updated", obj.id)
     return obj
+
+
+@router.post("/{objet_id}/enrich/stream")
+async def enrich_vin_stream(objet_id: int, db: Session = Depends(get_db)):
+    """Streaming variant of /enrich.
+
+    Returns a newline-delimited JSON stream (application/x-ndjson) with
+    progressive events while Llama generates:
+
+      {"type":"summary","text":"Le Moulin-à-Vent..."}   ← partial summary,
+                                                          updated every time
+                                                          the model emits a
+                                                          new chunk
+      {"type":"done","objet":{...full ObjetOut DTO...}} ← terminal event
+                                                          after sanity checks
+                                                          and DB persist
+      {"type":"error","message":"..."}                   ← on failure
+
+    The client reads line by line and updates the wine fiche live, so the
+    user sees the sommelier sentence type out instead of staring at a
+    frozen "Analyse…" for 60-90 s.
+    """
+    obj = (
+        db.query(models.Objet)
+        .options(joinedload(models.Objet.vin), joinedload(models.Objet.emplacement))
+        .filter(models.Objet.id == objet_id)
+        .first()
+    )
+    if not obj or not obj.vin:
+        raise HTTPException(404, "Vin introuvable")
+
+    vin = obj.vin  # bound names for the closure
+
+    async def emit():
+        try:
+            final = None
+            async for event in enrich_wine_stream(
+                appellation=vin.appellation,
+                domaine=vin.domaine,
+                millesime=vin.millesime,
+                type_=vin.type,
+            ):
+                t = event.get("type")
+                if t == "summary":
+                    yield json.dumps({
+                        "type": "summary", "text": event["text"],
+                    }, ensure_ascii=False) + "\n"
+                elif t == "done":
+                    final = event["enrichment"]
+            if final is None:
+                yield json.dumps({
+                    "type": "error",
+                    "message": "Stream terminé sans résultat.",
+                }) + "\n"
+                return
+
+            vin.enrichment_summary = final.summary or None
+            vin.apogee_year_min = final.apogee_year_min
+            vin.apogee_year_max = final.apogee_year_max
+            vin.keeping_year_max = final.keeping_year_max
+            vin.pairings_ideal = ", ".join(final.pairings_ideal) or None
+            vin.pairings_possible = ", ".join(final.pairings_possible) or None
+            vin.enriched_at = datetime.utcnow()
+            vin.enrichment_source = ENRICHMENT_MODEL
+            db.commit()
+            db.refresh(obj)
+            broadcast_sync("objet", "updated", obj.id)
+
+            # Send the persisted ObjetOut as the terminal payload so the
+            # client can drop the streaming dialog state and render the
+            # final fiche.
+            payload = schemas.ObjetOut.model_validate(obj).model_dump(
+                mode="json"
+            )
+            yield json.dumps({"type": "done", "objet": payload},
+                             ensure_ascii=False) + "\n"
+        except EnrichmentDisabled as exc:
+            yield json.dumps({
+                "type": "error", "message": str(exc),
+                "code": "disabled",
+            }) + "\n"
+        except EnrichmentError as exc:
+            yield json.dumps({
+                "type": "error", "message": str(exc),
+            }) + "\n"
+
+    return StreamingResponse(emit(), media_type="application/x-ndjson")
 
 
 @router.get("/priority", response_model=list[schemas.WinePriorityItem])

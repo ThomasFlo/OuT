@@ -130,6 +130,23 @@ interface ApiService {
     @POST("vins/{id}/enrich")
     suspend fun enrichWine(@Path("id") id: Long): ObjetDto
 
+    /**
+     * Streaming version of [enrichWine]. Returns an NDJSON stream the caller
+     * reads line by line; each line is one event:
+     *   - `{"type":"summary","text":"..."}`  partial sommelier text growing
+     *     character by character — display as it lands.
+     *   - `{"type":"done","objet":{...}}`    final ObjetDto, persisted server-
+     *     side, drop the streaming UI and render the full fiche.
+     *   - `{"type":"error","message":"..."}` server-side failure, surface to
+     *     the user.
+     * @Streaming tells Retrofit/OkHttp to deliver the response body as it
+     * arrives rather than buffering it whole — without this the stream is
+     * useless because we only see it after the server is done.
+     */
+    @Streaming
+    @POST("vins/{id}/enrich/stream")
+    suspend fun enrichWineStream(@Path("id") id: Long): ResponseBody
+
     @GET("vins/priority")
     suspend fun winesPriority(): List<WinePriorityDto>
 

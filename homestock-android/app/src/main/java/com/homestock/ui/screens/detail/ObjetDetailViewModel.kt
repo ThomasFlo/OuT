@@ -30,6 +30,8 @@ data class ObjetDetailState(
     // in Room) so the rest of the app stays unaware of it.
     val vinEnrichment: VinDto? = null,
     val enriching: Boolean = false,
+    /** Partial sommelier text growing as Llama generates — null while idle. */
+    val streamingSummary: String? = null,
     val enrichmentError: String? = null,
 )
 
@@ -80,33 +82,58 @@ class ObjetDetailViewModel @Inject constructor(
     }
 
     /**
-     * Asks the server to (re)run Claude on this wine. The endpoint may return
-     * 503 (no API key) or 502 (LLM error); both are surfaced via
-     * [ObjetDetailState.enrichmentError] for the dialog to display.
+     * Streams the sommelier response from the server. The dialog state
+     * carries [streamingSummary] which grows as Llama emits each token,
+     * giving the user a ChatGPT-style "typing" effect. The terminal Done
+     * event swaps to the final [vinEnrichment] and clears the streaming
+     * state; Failed surfaces the message in [enrichmentError].
      */
     fun enrichWine() {
         val obj = _state.value.objet ?: return
         val serverId = obj.serverId ?: return
         if (_state.value.enriching) return
         viewModelScope.launch {
-            _state.update { it.copy(enriching = true, enrichmentError = null) }
-            runCatching { repository.enrichWine(serverId) }
-                .onSuccess { vin ->
-                    _state.update {
-                        it.copy(
-                            enriching = false,
-                            vinEnrichment = vin ?: it.vinEnrichment,
-                        )
+            _state.update {
+                it.copy(
+                    enriching = true,
+                    streamingSummary = "",
+                    enrichmentError = null,
+                )
+            }
+            try {
+                repository.enrichWineStream(serverId).collect { event ->
+                    when (event) {
+                        is com.homestock.data.remote.WineEnrichEvent.SummaryDelta ->
+                            _state.update { it.copy(streamingSummary = event.text) }
+                        is com.homestock.data.remote.WineEnrichEvent.Done ->
+                            _state.update {
+                                it.copy(
+                                    enriching = false,
+                                    streamingSummary = null,
+                                    vinEnrichment = event.objet.vin
+                                        ?: it.vinEnrichment,
+                                )
+                            }
+                        is com.homestock.data.remote.WineEnrichEvent.Failed ->
+                            _state.update {
+                                it.copy(
+                                    enriching = false,
+                                    streamingSummary = null,
+                                    enrichmentError = event.message,
+                                )
+                            }
                     }
                 }
-                .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            enriching = false,
-                            enrichmentError = apiErrorMessage(e) ?: "Échec de l'enrichissement",
-                        )
-                    }
+            } catch (e: Throwable) {
+                _state.update {
+                    it.copy(
+                        enriching = false,
+                        streamingSummary = null,
+                        enrichmentError = apiErrorMessage(e)
+                            ?: "Échec de l'enrichissement",
+                    )
                 }
+            }
         }
     }
 
