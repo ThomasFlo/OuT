@@ -19,10 +19,12 @@ import com.homestock.domain.model.Categories
 import com.homestock.domain.model.SearchResult
 import com.homestock.util.normalizeForSearch
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -364,7 +366,7 @@ class HomeStockRepository @Inject constructor(
             } finally {
                 runCatching { body.close() }
             }
-        }.flowOn(kotlinx.coroutines.Dispatchers.IO)
+        }.flowOn(Dispatchers.IO)
 
     /** Fetch the latest server VinDto for one objet (used by the wine fiche). */
     suspend fun fetchVinDto(objetServerId: Long): com.homestock.data.remote.dto.VinDto? =
