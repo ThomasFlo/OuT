@@ -54,12 +54,17 @@ def wine_stats(db: Session = Depends(get_db)):
 
 
 @router.post("/{objet_id}/enrich", response_model=schemas.ObjetOut)
-def enrich_vin(objet_id: int, db: Session = Depends(get_db)):
-    """Call Claude to fill in the LLM-derived fields on this wine.
+async def enrich_vin(objet_id: int, db: Session = Depends(get_db)):
+    """Call the local LLM to fill in the sommelier-derived fields on this wine.
 
     Idempotent: running it twice simply refreshes the enrichment.
-    Returns 503 when ANTHROPIC_API_KEY isn't set so the client can show a
+    Returns 503 when no LLM is configured so the client can show a
     friendly message instead of a generic error.
+
+    Async on purpose — the Ollama call can take 60-180 s on a CPU NAS
+    during cold start; running sync would tie up a FastAPI worker thread
+    for the whole duration and cause the API's TCP accept queue to
+    overflow under burst clicks (silent SYN drops → Android ConnectException).
     """
     obj = (
         db.query(models.Objet)
@@ -71,7 +76,7 @@ def enrich_vin(objet_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Vin introuvable")
 
     try:
-        result = enrich_wine(
+        result = await enrich_wine(
             appellation=obj.vin.appellation,
             domaine=obj.vin.domaine,
             millesime=obj.vin.millesime,
