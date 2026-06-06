@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class HostSelectionInterceptor : Interceptor {
 
-    private val host = AtomicReference("192.168.1.100")
+    private val host = AtomicReference("192.168.1.3")
     private val port = AtomicReference(8080)
 
     fun update(newHost: String, newPort: Int) {

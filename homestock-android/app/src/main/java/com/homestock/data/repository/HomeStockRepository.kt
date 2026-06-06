@@ -371,6 +371,8 @@ class HomeStockRepository @Inject constructor(
         host.update(hostName, port)
         connectRealtime()
     }
+
+    fun nasAddress(): String = host.baseHttpUrl()
 }
 
 private fun stripQuestionWords(query: String): String {

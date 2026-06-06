@@ -103,7 +103,8 @@ class ObjetDetailViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             enriching = false,
-                            enrichmentError = apiErrorMessage(e) ?: "Échec de l'enrichissement",
+                            enrichmentError = apiErrorMessage(e, repository.nasAddress())
+                                ?: "Échec de l'enrichissement",
                         )
                     }
                 }
