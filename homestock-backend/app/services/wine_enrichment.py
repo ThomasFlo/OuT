@@ -486,14 +486,23 @@ def _build_user_prompt(
     return "Vin à analyser :\n" + "\n".join(parts)
 
 
-def enrich_wine(
+async def enrich_wine(
     *,
     appellation: str | None,
     domaine: str | None,
     millesime: int | None,
     type_: str | None,
 ) -> WineEnrichment:
-    """Synchronous call to Ollama. Returns the parsed enrichment or raises."""
+    """Async call to Ollama.
+
+    Async on purpose: an Ollama inference can take 60-180 s on a CPU NAS,
+    and our wine enrichment is the only endpoint that calls it. If we ran
+    sync, FastAPI would tie up a worker thread for the full duration and
+    the API's accept queue could overflow under burst clicks, dropping
+    new TCP connections silently (manifests as "failed to connect after
+    15000ms" on Android even though no network is broken). Running the
+    httpx call on the asyncio event loop frees up workers and keeps the
+    accept loop responsive."""
     base_url = _ollama_url()
     if not base_url:
         raise EnrichmentDisabled(
@@ -533,13 +542,11 @@ def enrich_wine(
     log.info("Calling Ollama at %s with model %s", base_url, model)
     try:
         # Split timeouts: connection should be fast (LAN), but reads can
-        # be slow on a cold-start 7B inference. Httpx defaults to a single
-        # timeout for everything, which made cold starts trip the wrong
-        # error message in earlier builds.
+        # be slow on a cold-start inference.
         timeout = httpx.Timeout(connect=10.0, read=CALL_TIMEOUT_SECONDS,
                                 write=10.0, pool=10.0)
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(f"{base_url}/api/chat", json=payload)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(f"{base_url}/api/chat", json=payload)
     except httpx.ConnectError as exc:
         raise EnrichmentError(
             "Ollama injoignable. Vérifie que le conteneur homestock-ollama "
