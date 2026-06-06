@@ -25,10 +25,12 @@ log = logging.getLogger("homestock.wine_enrichment")
 DEFAULT_BASE_URL = "http://homestock-ollama:11434"
 DEFAULT_MODEL = "llama3.2:3b"
 
-# Generous timeout for the cold-start case (model not yet in RAM). The 3B
-# model loads in ~5-10 s and a warm call returns in 3-5 s; 90 s is enough
-# headroom for both load and a long generation.
-CALL_TIMEOUT_SECONDS = 90.0
+# Read timeout. On a weak NAS CPU, the first analyse-on-a-cold-model can
+# spend 60-90 s just *evaluating* the 6 k-token sommelier prompt before
+# the model starts generating — Ollama's prompt cache kicks in on the
+# second call and brings warm calls down to ~3-5 s. 180 s gives the cold
+# case enough headroom while still bailing out on real hangs.
+CALL_TIMEOUT_SECONDS = 180.0
 
 SYSTEM_PROMPT = """Tu es un sommelier expert français. À partir des \
 informations de base sur un vin (appellation, domaine, millésime, type), \
@@ -546,9 +548,11 @@ def enrich_wine(
     except httpx.ReadTimeout as exc:
         raise EnrichmentError(
             f"Ollama n'a pas répondu en {int(CALL_TIMEOUT_SECONDS)}s. "
-            "Le modèle finit peut-être de charger en RAM ; réessaie dans "
-            "une minute. Si ça persiste, le NAS manque de RAM pour ce modèle "
-            "— bascule sur OLLAMA_MODEL=llama3.2:3b."
+            "Le premier appel sur un modèle froid évalue tout le guide "
+            "sommelier et peut être lent ; réessaie une seconde fois "
+            "(le cache d'Ollama divise le temps par 5-10). "
+            "Si ça persiste, ton CPU est trop juste pour ce modèle — "
+            "raccourcis le prompt ou réduis num_ctx."
         ) from exc
     except httpx.HTTPError as exc:
         log.exception("Ollama call failed")
