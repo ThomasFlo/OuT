@@ -147,7 +147,9 @@ async def enrich_vin_stream(objet_id: int, db: Session = Depends(get_db)):
                 type_=vin.type,
             ):
                 t = event.get("type")
-                if t == "summary":
+                if t == "started":
+                    yield json.dumps({"type": "started"}) + "\n"
+                elif t == "summary":
                     yield json.dumps({
                         "type": "summary", "text": event["text"],
                     }, ensure_ascii=False) + "\n"

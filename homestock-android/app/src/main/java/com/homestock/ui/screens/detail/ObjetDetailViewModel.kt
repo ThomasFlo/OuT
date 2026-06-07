@@ -103,6 +103,11 @@ class ObjetDetailViewModel @Inject constructor(
             try {
                 repository.enrichWineStream(serverId).collect { event ->
                     when (event) {
+                        com.homestock.data.remote.WineEnrichEvent.Started ->
+                            // Already enriching=true, just acknowledge the
+                            // connection — useful UX cue so the user sees
+                            // something is happening before Llama starts.
+                            _state.update { it.copy(streamingSummary = "") }
                         is com.homestock.data.remote.WineEnrichEvent.SummaryDelta ->
                             _state.update { it.copy(streamingSummary = event.text) }
                         is com.homestock.data.remote.WineEnrichEvent.Done ->

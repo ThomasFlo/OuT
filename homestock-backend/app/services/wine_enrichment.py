@@ -334,8 +334,12 @@ async def enrich_wine_stream(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "format": "json",
-        "stream": True,  # streamed
+        # NOTE: removed `"format": "json"` here. Ollama's grammar-constrained
+        # JSON decoder is known to buffer the entire response before flushing
+        # the stream, which kills our token-by-token UI and burned the 180 s
+        # client timeout. We now parse the model's free-form output manually
+        # below (and it usually emits valid JSON anyway thanks to the prompt).
+        "stream": True,
         "options": {
             "temperature": 0.2,
             "num_ctx": 4096,
@@ -343,9 +347,19 @@ async def enrich_wine_stream(
         },
     }
 
-    log.info("Streaming Ollama at %s with model %s", base_url, model)
+    log.info("Streaming Ollama at %s with model %s, prompt ~%d chars",
+             base_url, model, len(SYSTEM_PROMPT) + len(user_prompt))
+
+    # Tell the client we've started — the dialog can show "Connecting…" or
+    # similar so the user isn't staring at a frozen Analyse… for 60 s while
+    # the model is paging weights in.
+    yield {"type": "started"}
+
     accumulated: list[str] = []
     last_summary: str | None = None
+    import time as _t
+    t_open = _t.monotonic()
+    first_token_logged = False
 
     try:
         timeout = httpx.Timeout(connect=10.0, read=CALL_TIMEOUT_SECONDS,
@@ -353,6 +367,9 @@ async def enrich_wine_stream(
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("POST", f"{base_url}/api/chat",
                                      json=payload) as resp:
+                t_headers = _t.monotonic()
+                log.info("Ollama responded with headers after %.1fs",
+                         t_headers - t_open)
                 if resp.status_code == 404:
                     raise EnrichmentError(
                         f"Modèle « {model} » indisponible sur Ollama. "
@@ -375,6 +392,12 @@ async def enrich_wine_stream(
                         continue
                     token = (chunk.get("message") or {}).get("content", "")
                     if token:
+                        if not first_token_logged:
+                            log.info(
+                                "First token from Ollama after %.1fs",
+                                _t.monotonic() - t_open,
+                            )
+                            first_token_logged = True
                         accumulated.append(token)
                         summary = _extract_partial_summary("".join(accumulated))
                         if summary is not None and summary != last_summary:

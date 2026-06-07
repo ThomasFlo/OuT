@@ -13,6 +13,14 @@ import com.homestock.data.remote.dto.ObjetDto
  * mapped to ``null`` so the Flow simply skips it.
  */
 sealed interface WineEnrichEvent {
+    /**
+     * Sent immediately by the server once the request is accepted, before
+     * the model has produced anything. Lets the UI swap "Analyse…" for
+     * "Le modèle réfléchit…" so the user knows the connection is live and
+     * we're waiting on Llama, not on the network.
+     */
+    data object Started : WineEnrichEvent
+
     /** Partial sommelier summary, growing as the model emits more tokens. */
     data class SummaryDelta(val text: String) : WineEnrichEvent
 
@@ -28,6 +36,7 @@ fun parseWineEnrichEvent(line: String, gson: Gson): WineEnrichEvent? {
         JsonParser.parseString(line).asJsonObject
     }.getOrNull() ?: return null
     return when (root.get("type")?.asString) {
+        "started" -> WineEnrichEvent.Started
         "summary" -> WineEnrichEvent.SummaryDelta(
             root.get("text")?.asString.orEmpty(),
         )
