@@ -399,11 +399,44 @@ async def enrich_wine_stream(
         if content.lower().startswith("json"):
             content = content[4:].lstrip()
 
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError as exc:
-        log.warning("Ollama returned non-JSON: %r", content[:200])
-        raise EnrichmentError(f"JSON invalide du modèle : {exc}") from exc
+    # Tolerant extraction: without `format: "json"` the model sometimes wraps
+    # the answer in prose ("Voici l'analyse pour ce vin : { ... }"). Find
+    # the outermost JSON object and parse just that.
+    parsed: dict | None = None
+    first_brace = content.find("{")
+    last_brace = content.rfind("}")
+    if first_brace >= 0 and last_brace > first_brace:
+        candidate = content[first_brace : last_brace + 1]
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            parsed = None
+    if parsed is None:
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            # Last-chance fallback: if we managed to stream a partial summary
+            # but the rest of the JSON is broken, persist at least the
+            # summary so the user keeps something. Use the streamed partial
+            # we tracked above (last_summary).
+            log.warning("Ollama returned non-JSON (%d chars): %r",
+                        len(content), content[:300])
+            if last_summary and last_summary.strip():
+                yield {
+                    "type": "done",
+                    "enrichment": WineEnrichment(
+                        summary=last_summary.strip(),
+                        apogee_year_min=None,
+                        apogee_year_max=None,
+                        keeping_year_max=None,
+                        pairings_ideal=[],
+                        pairings_possible=[],
+                    ),
+                }
+                return
+            raise EnrichmentError(
+                f"JSON invalide du modèle : {exc}"
+            ) from exc
 
     apogee_min = _safe_year(parsed.get("apogee_year_min"))
     apogee_max = _safe_year(parsed.get("apogee_year_max"))

@@ -191,6 +191,17 @@ async def enrich_vin_stream(objet_id: int, db: Session = Depends(get_db)):
             yield json.dumps({
                 "type": "error", "message": str(exc),
             }) + "\n"
+        except Exception as exc:  # noqa: BLE001 — never close the stream silently
+            # Anything else (DB write, Pydantic dump, network…) used to bubble
+            # up and FastAPI closed the connection abruptly. From the client
+            # that looked like a generic "Échec de l'enrichissement" with no
+            # real reason. Now we surface the actual error message instead.
+            import traceback
+            traceback.print_exc()
+            yield json.dumps({
+                "type": "error",
+                "message": f"Erreur serveur : {type(exc).__name__}: {exc}"[:300],
+            }) + "\n"
 
     return StreamingResponse(emit(), media_type="application/x-ndjson")
 
