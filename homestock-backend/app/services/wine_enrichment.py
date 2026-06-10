@@ -295,11 +295,13 @@ async def enrich_wine_stream(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        # NOTE: removed `"format": "json"` here. Ollama's grammar-constrained
-        # JSON decoder is known to buffer the entire response before flushing
-        # the stream, which kills our token-by-token UI and burned the 180 s
-        # client timeout. We now parse the model's free-form output manually
-        # below (and it usually emits valid JSON anyway thanks to the prompt).
+        # `format: "json"` est indispensable : sans lui, llama3.2:3b ignore
+        # parfois la consigne et répond en prose Markdown → plus de champ
+        # "summary" à streamer et parse final impossible. Les anciens
+        # timeouts venaient du prompt trop long (6k tokens) et du modèle non
+        # préchargé, pas d'un buffering du grammar-decoder : le streaming
+        # token-par-token fonctionnait bien avec format:"json".
+        "format": "json",
         "stream": True,
         # keep_alive: -1 = garde le modèle chargé indéfiniment en RAM. Sans
         # ça, Ollama décharge après ~5 min d'inactivité, et le call suivant
