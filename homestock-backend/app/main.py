@@ -96,7 +96,48 @@ async def on_startup() -> None:
     # semantic search after a fresh install isn't a sequential scan.
     with engine.begin() as conn:
         conn.execute(text("ANALYZE objets"))
+
+    # Pre-warm the wine-enrichment LLM so the user's first analyse doesn't
+    # pay the ~30-60 s cold start to page Llama 3.2 into RAM. Fire and
+    # forget — if Ollama isn't reachable we just log and move on; the
+    # enrichment endpoint will surface a friendly error on first use.
+    asyncio.create_task(_prewarm_ollama())
+
     log.info("HomeStock API ready.")
+
+
+async def _prewarm_ollama() -> None:
+    """Send a tiny request to Ollama at startup to load the model in RAM.
+
+    Without keep_alive=-1 in the inference call AND a warmup at boot,
+    every cold call would re-page ~2 GB of weights from disk, costing
+    30-60 s on weak NAS CPUs."""
+    import os
+    import httpx as _httpx
+
+    base = os.environ.get("OLLAMA_BASE_URL", "http://homestock-ollama:11434")
+    model = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+    if not base:
+        return
+    payload = {
+        "model": model,
+        "prompt": "ok",
+        "stream": False,
+        "keep_alive": -1,
+        "options": {"num_predict": 1, "num_ctx": 512},
+    }
+    try:
+        async with _httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(f"{base}/api/generate", json=payload)
+            if r.status_code == 200:
+                log.info("Ollama pre-warmed (model %s loaded in RAM)", model)
+            else:
+                log.warning(
+                    "Ollama pre-warm got status %d: %s",
+                    r.status_code, r.text[:120],
+                )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Ollama pre-warm failed: %s", exc)
 
 
 @app.get("/health")

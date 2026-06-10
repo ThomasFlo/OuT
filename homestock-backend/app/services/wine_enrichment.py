@@ -33,162 +33,123 @@ DEFAULT_MODEL = "llama3.2:3b"
 # case enough headroom while still bailing out on real hangs.
 CALL_TIMEOUT_SECONDS = 180.0
 
-SYSTEM_PROMPT = """Tu es un sommelier français expert. Réponds UNIQUEMENT par un objet JSON (pas de markdown, pas de texte autour) avec exactement ces clés :
+SYSTEM_PROMPT = """Sommelier français. Réponds UNIQUEMENT par un JSON valide (pas de markdown, pas de texte autour) :
 
 {
-  "summary": "2-4 phrases sur le vin (caractère, robe, arômes).",
-  "apogee_year_min": <année où il entre en apogée>,
-  "apogee_year_max": <année où il en sort>,
-  "keeping_year_max": <dernière année où il se boit>,
+  "summary": "2-4 phrases (caractère, robe, arômes).",
+  "apogee_year_min": <année>,
+  "apogee_year_max": <année>,
+  "keeping_year_max": <année>,
   "pairings_ideal": ["plat 1", "plat 2", "plat 3"],
-  "pairings_possible": ["plat 4", "plat 5", "plat 6"]
+  "pairings_possible": ["plat 4", "plat 5"]
 }
 
-MÉTHODE — anchor sur le millésime M (l'année sur l'étiquette).
-Calcule chaque année comme M + offset selon la famille du vin.
-N'utilise JAMAIS l'année courante comme ancre.
-Si M est inconnu → prends M = 2024.
-Toujours : apogee_year_min ≤ apogee_year_max ≤ keeping_year_max.
+MÉTHODE — M = millésime (année de l'étiquette).
+Calcule chaque année = M + offset selon la famille.
+Si M inconnu → M = 2024.
+Toujours : apogee_min ≤ apogee_max ≤ keeping_max.
 
-TABLE D'OFFSETS (en années après M : début | apogée_min..max | garde_max)
+OFFSETS (en années après M : début | apogée_min..max | garde_max)
 
 Beaujolais
-  Nouveau / Primeur                    | M+0  | M+0..M+1   | M+2
-  AOC / Villages                       | M+1  | M+2..M+4   | M+6
-  Cru léger (Brouilly, Chiroubles)     | M+2  | M+3..M+6   | M+8
-  Cru classique (Fleurie, Juliénas)    | M+2  | M+4..M+8   | M+10
-  Cru structuré (Morgon, Moulin-à-Vent)| M+3  | M+5..M+10  | M+15
+  Nouveau / Primeur            | M+0  | M+0..M+1  | M+2
+  AOC / Villages               | M+1  | M+2..M+4  | M+6
+  Cru léger (Brouilly…)        | M+2  | M+3..M+6  | M+8
+  Cru classique (Fleurie…)     | M+2  | M+4..M+8  | M+10
+  Cru structuré (Morgon,       | M+3  | M+5..M+10 | M+15
+    Moulin-à-Vent)
 
 Bourgogne rouge
-  Régional / Hautes-Côtes              | M+2  | M+3..M+5   | M+8
-  Village Côte de Beaune (Pommard…)    | M+4  | M+6..M+10  | M+15
-  Village Côte de Nuits (Gevrey…)      | M+5  | M+8..M+12  | M+18
-  1er Cru Côte de Beaune                | M+5  | M+8..M+15  | M+20
-  1er Cru Côte de Nuits                 | M+7  | M+10..M+18 | M+25
-  Grand Cru (Chambertin, Romanée…)     | M+10 | M+15..M+25 | M+40
+  Régional / Hautes-Côtes      | M+2  | M+3..M+5  | M+8
+  Village Côte de Beaune       | M+4  | M+6..M+10 | M+15
+  Village Côte de Nuits        | M+5  | M+8..M+12 | M+18
+  1er Cru                      | M+6  | M+8..M+15 | M+22
+  Grand Cru                    | M+10 | M+15..M+25| M+40
 
 Bordeaux rouge
-  Bordeaux / Bordeaux Supérieur        | M+2  | M+3..M+6   | M+8
-  Côtes de Bordeaux / Castillon        | M+3  | M+4..M+7   | M+10
-  Médoc / Haut-Médoc                   | M+3  | M+5..M+10  | M+15
-  Saint-Émilion satellite              | M+3  | M+4..M+8   | M+12
-  Cru Bourgeois Médoc                  | M+4  | M+6..M+12  | M+18
-  Saint-Émilion Grand Cru              | M+4  | M+7..M+15  | M+20
-  Pomerol courant                      | M+5  | M+8..M+15  | M+22
-  Grand Cru Classé Médoc (2e-5e)       | M+6  | M+10..M+20 | M+30
-  Pessac-Léognan classé                | M+6  | M+10..M+18 | M+28
-  1er GCC (Latour, Margaux, Mouton…)   | M+10 | M+15..M+30 | M+50
+  Bordeaux / Sup.              | M+2  | M+3..M+6  | M+8
+  Côtes de Bordeaux            | M+3  | M+4..M+7  | M+10
+  Médoc / Haut-Médoc           | M+3  | M+5..M+10 | M+15
+  Cru Bourgeois                | M+4  | M+6..M+12 | M+18
+  Saint-Émilion GC             | M+4  | M+7..M+15 | M+20
+  Pomerol                      | M+5  | M+8..M+15 | M+22
+  Grand Cru Classé Médoc       | M+6  | M+10..M+20| M+30
+  1er GCC (Latour, Margaux…)   | M+10 | M+15..M+30| M+50
 
 Rhône rouge
-  Côtes du Rhône                       | M+1  | M+2..M+4   | M+6
-  Côtes du Rhône Villages              | M+2  | M+3..M+6   | M+8
-  Gigondas / Vacqueyras                | M+4  | M+6..M+12  | M+18
-  Châteauneuf-du-Pape                  | M+5  | M+8..M+15  | M+25
-  Crozes-Hermitage / Saint-Joseph      | M+3  | M+5..M+10  | M+15
-  Cornas / Côte-Rôtie                  | M+5  | M+10..M+18 | M+25
-  Hermitage                            | M+7  | M+10..M+20 | M+35
+  Côtes du Rhône               | M+1  | M+2..M+4  | M+6
+  Côtes du Rhône Villages      | M+2  | M+3..M+6  | M+8
+  Gigondas / Vacqueyras        | M+4  | M+6..M+12 | M+18
+  Châteauneuf-du-Pape          | M+5  | M+8..M+15 | M+25
+  Crozes-Hermitage / St-Joseph | M+3  | M+5..M+10 | M+15
+  Cornas / Côte-Rôtie          | M+5  | M+10..M+18| M+25
+  Hermitage                    | M+7  | M+10..M+20| M+35
 
-Loire rouge
-  Touraine / Anjou                     | M+1  | M+2..M+4   | M+6
-  Chinon / Bourgueil / Saumur-Champ.   | M+2  | M+3..M+6   | M+10
-  Sancerre rouge                       | M+2  | M+3..M+5   | M+8
-
-Languedoc / Provence / SO rouge
-  IGP Pays d'Oc / Languedoc générique  | M+1  | M+1..M+3   | M+5
-  Languedoc Villages (Pic, Faugères…)  | M+2  | M+3..M+6   | M+10
-  Bandol                               | M+4  | M+6..M+12  | M+20
-  Cahors / Madiran                     | M+3  | M+5..M+10  | M+15
+Loire rouge / Languedoc / SO
+  Touraine / Anjou             | M+1  | M+2..M+4  | M+6
+  Chinon / Bourgueil / Saumur  | M+2  | M+3..M+6  | M+10
+  Languedoc générique          | M+1  | M+1..M+3  | M+5
+  Languedoc Villages           | M+2  | M+3..M+6  | M+10
+  Bandol / Cahors / Madiran    | M+3  | M+5..M+10 | M+15
 
 Bourgogne blanc
-  Régional / Aligoté                   | M+0  | M+1..M+2   | M+4
-  Mâcon / Saint-Véran / Pouilly-Fuissé | M+1  | M+2..M+4   | M+6
-  Chablis AOC                          | M+1  | M+2..M+4   | M+6
-  Chablis 1er Cru                      | M+2  | M+3..M+8   | M+12
-  Chablis Grand Cru                    | M+3  | M+5..M+12  | M+20
-  Village Côte de Beaune (Meursault…)  | M+2  | M+4..M+8   | M+15
-  1er Cru Côte de Beaune blanc         | M+3  | M+5..M+12  | M+20
-  Grand Cru (Montrachet, Corton-Char.) | M+5  | M+8..M+18  | M+30
+  Régional / Mâcon             | M+1  | M+2..M+4  | M+6
+  Chablis AOC                  | M+1  | M+2..M+4  | M+6
+  Chablis 1er / Grand Cru      | M+2  | M+4..M+10 | M+18
+  Village (Meursault, Puligny) | M+2  | M+4..M+8  | M+15
+  1er Cru / Grand Cru blanc    | M+4  | M+6..M+15 | M+25
 
-Loire blanc
-  Muscadet                             | M+0  | M+0..M+2   | M+4
-  Muscadet sur lie élevage long        | M+1  | M+2..M+5   | M+10
-  Sancerre / Pouilly-Fumé              | M+1  | M+2..M+4   | M+6
-  Vouvray sec                          | M+2  | M+3..M+8   | M+15
-  Vouvray demi-sec / moelleux          | M+3  | M+5..M+15  | M+30
-  Savennières                          | M+3  | M+5..M+10  | M+20
-  Coteaux du Layon / Quarts de Chaume  | M+5  | M+8..M+20  | M+40
+Loire blanc / Bordeaux blanc / Rhône blanc / Alsace
+  Muscadet                     | M+0  | M+0..M+2  | M+4
+  Sancerre / Pouilly-Fumé      | M+1  | M+2..M+4  | M+6
+  Vouvray sec                  | M+2  | M+3..M+8  | M+15
+  Vouvray moelleux / Layon     | M+5  | M+8..M+20 | M+40
+  Bordeaux blanc sec           | M+1  | M+1..M+3  | M+5
+  Pessac-Léognan blanc         | M+2  | M+3..M+6  | M+10
+  Sauternes                    | M+5  | M+10..M+25| M+50
+  Côtes du Rhône blanc         | M+0  | M+1..M+3  | M+5
+  Châteauneuf-du-Pape blanc    | M+2  | M+3..M+8  | M+15
+  Alsace courant               | M+1  | M+1..M+3  | M+5
+  Riesling / Gewurz / Pinot Gr | M+2  | M+3..M+8  | M+15
+  VT / SGN                     | M+5  | M+8..M+20 | M+40
 
-Bordeaux blanc
-  Bordeaux blanc sec                   | M+1  | M+1..M+3   | M+5
-  Pessac-Léognan / Graves blanc        | M+2  | M+3..M+6   | M+10
-  Sauternes / Barsac                   | M+5  | M+10..M+25 | M+50
-  Sauternes 1er cru (Yquem, Suduiraut) | M+8  | M+15..M+40 | M+80
-
-Rhône blanc
-  Côtes du Rhône blanc                 | M+0  | M+1..M+3   | M+5
-  Châteauneuf-du-Pape blanc / Condrieu | M+2  | M+3..M+8   | M+15
-  Hermitage blanc                      | M+5  | M+10..M+20 | M+40
-
-Alsace
-  Sylvaner / Pinot Blanc / Edelzwicker | M+1  | M+1..M+3   | M+5
-  Riesling / Gewurz / Pinot Gris       | M+2  | M+3..M+8   | M+15
-  Grand Cru                            | M+3  | M+5..M+15  | M+25
-  Vendanges Tardives / SGN             | M+5  | M+8..M+20  | M+40
-
-Rosé
-  Provence, Côtes du Rhône, IGP        | M+0  | M+0..M+1   | M+2
-  Tavel / Bandol rosé                  | M+0  | M+1..M+3   | M+5
-
-Effervescent
-  Crémant                              | M+1  | M+2..M+4   | M+6
-  Champagne BSA (M = année d'achat)    | M+2  | M+3..M+5   | M+8
-  Champagne millésimé                  | M+5  | M+8..M+15  | M+25
-  Champagne prestige (Krug, DP…)       | M+8  | M+12..M+25 | M+40
-
-Vins étrangers de garde (à connaître)
-  Chianti Classico Riserva             | M+3  | M+5..M+12  | M+20
-  Brunello di Montalcino               | M+5  | M+8..M+18  | M+30
-  Barolo / Barbaresco                  | M+7  | M+10..M+20 | M+35
-  Amarone                              | M+5  | M+8..M+15  | M+25
-  Rioja Reserva                        | M+3  | M+5..M+10  | M+15
-  Rioja Gran Reserva                   | M+5  | M+8..M+15  | M+25
-  Ribera del Duero                     | M+3  | M+5..M+10  | M+15
-  Priorat                              | M+5  | M+8..M+15  | M+25
-  Porto Vintage                        | M+10 | M+20..M+40 | M+80
-  Napa Cabernet                        | M+5  | M+8..M+15  | M+25
-  Shiraz Barossa                       | M+3  | M+5..M+10  | M+15
+Rosé / Effervescent
+  Rosé courant                 | M+0  | M+0..M+1  | M+2
+  Bandol / Tavel               | M+0  | M+1..M+3  | M+5
+  Crémant                      | M+1  | M+2..M+4  | M+6
+  Champagne BSA                | M+2  | M+3..M+5  | M+8
+  Champagne millésimé          | M+5  | M+8..M+15 | M+25
+  Champagne prestige           | M+8  | M+12..M+25| M+40
 
 MODIFICATEURS
-  +30 % offsets si "Grand Cru" / "1er Cru" / "Premier Cru"
-  +20 % si "Réserve" / "Gran Reserva" / "Cuvée prestige"
-  +15 % si "Vieilles Vignes" / "V.V."
-  Si "Primeur" / "Nouveau" → rabats à M+0 | M+0..M+1 | M+2
+  +30 % si "Grand Cru" / "1er Cru" / "Premier Cru"
+  +20 % si "Réserve" / "Cuvée prestige"
+  +15 % si "Vieilles Vignes"
+  Si "Nouveau" / "Primeur" → M+0 | M+0..M+1 | M+2
 
-FALLBACK si appellation totalement inconnue :
+FALLBACK si appellation inconnue :
   Rouge → M+2 | M+3..M+6 | M+10
   Blanc → M+1 | M+1..M+3 | M+5
   Rosé  → M+0 | M+0..M+1 | M+2
-  Champagne → M+2 | M+3..M+5 | M+8
-Si ni appellation ni type → null/[] partout, summary = "Informations insuffisantes pour un avis fiable."
+Si ni appellation ni type → tout à null/[], summary = "Informations insuffisantes."
 
-EXEMPLE — Moulin-à-Vent 2023, Rouge :
-Famille = Beaujolais cru structuré. Offsets M+3 | M+5..M+10 | M+15.
+EXEMPLE — Moulin-à-Vent 2023 Rouge :
+Famille = Beaujolais cru structuré. M+3 | M+5..M+10 | M+15.
 2023+3=2026, 2023+5=2028, 2023+10=2033, 2023+15=2038.
-
 {
-  "summary": "Le Moulin-à-Vent 2023 est un Beaujolais cru structuré, robe rubis profond, nez de fruits noirs, violette et épices douces, trame tannique fine qui s'arrondit avec quelques années de cave.",
+  "summary": "Moulin-à-Vent 2023, Beaujolais cru le plus structuré : robe rubis profond, fruits noirs, violette, épices douces, trame tannique fine.",
   "apogee_year_min": 2028,
   "apogee_year_max": 2033,
   "keeping_year_max": 2038,
   "pairings_ideal": ["coq au vin", "bœuf bourguignon", "civet de lièvre"],
-  "pairings_possible": ["volaille rôtie", "magret de canard", "tomme de Savoie"]
+  "pairings_possible": ["volaille rôtie", "tomme de Savoie"]
 }
 
-RÈGLES FINALES
+RÈGLES
 - Années entre 1990 et 2080.
 - Si tu reconnais la famille → tu DOIS sortir les 3 années.
 - Plats en français, minuscules sauf noms propres.
-- Strictement JSON, rien d'autre.
+- JSON strict, rien d'autre.
 """
 
 
@@ -340,10 +301,16 @@ async def enrich_wine_stream(
         # client timeout. We now parse the model's free-form output manually
         # below (and it usually emits valid JSON anyway thanks to the prompt).
         "stream": True,
+        # keep_alive: -1 = garde le modèle chargé indéfiniment en RAM. Sans
+        # ça, Ollama décharge après ~5 min d'inactivité, et le call suivant
+        # paie à nouveau les 30-60 s de chargement des poids sur disque.
+        "keep_alive": -1,
         "options": {
             "temperature": 0.2,
-            "num_ctx": 4096,
-            "num_predict": 700,
+            # Le prompt est ~1400 tokens, l'output ~500 ; 2048 suffit.
+            # KV cache 4× plus petit qu'à 8192 → eval CPU bien plus rapide.
+            "num_ctx": 2048,
+            "num_predict": 600,
         },
     }
 
